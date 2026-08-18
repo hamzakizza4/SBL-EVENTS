@@ -1,0 +1,6 @@
+{
+  "name": "SBL Events",
+  "description": "Full-service event production, mega tents rental & lending, stage & lighting, mobile disco, MCs, LED screens, and luxury mobile toilets with online booking and admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
