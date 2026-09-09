@@ -236,18 +236,39 @@ export interface VideoReel {
   id: string;
   title: string;
   description: string;
-  category: 'megatent' | 'weddings' | 'screens' | 'lighting' | 'sound';
+  category: 'megatent' | 'weddings' | 'screens' | 'lighting' | 'sound' | 'Dome Tents' | string;
   tiktokHandle: string;
-  tiktokUrl: string;
-  hotline: string;
+  tiktokUrl?: string;
+  videoUrl?: string;
+  hotline?: string;
   thumbnail: string;
   badge: string;
   duration: string;
   viewsCount?: string;
-  location: string;
-  equipmentHighlights: string[];
+  likesCount?: string;
+  location?: string;
+  equipmentHighlights?: string[];
   audioTranscriptNotes?: string;
   ugxEstimate?: number;
+}
+
+export interface TikTokSectionConfig {
+  badge: string;
+  title: string;
+  description: string;
+  tiktokUrl: string;
+  tiktokHandle: string;
+  hotline: string;
+  // Extended/alias fields for UI flexibility
+  badgeText?: string;
+  sectionTitle?: string;
+  sectionSubtitle?: string;
+  subtitle?: string;
+  profileUrl?: string;
+  buttonLabel?: string;
+  followersCount?: string;
+  likesCount?: string;
+  isLiveNow?: boolean;
 }
 
 export interface GalleryItem {
@@ -338,4 +359,11 @@ export interface AdminUser {
   permissions: AdminPermissions;
   createdAt: string;
   lastLogin?: string;
+}
+
+export type CardEditorType = 'service' | 'category' | 'gallery' | 'reel' | 'testimonial' | 'event';
+
+export interface CardEditorItem {
+  type: CardEditorType;
+  data: any;
 }

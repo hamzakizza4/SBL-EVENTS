@@ -121,6 +121,24 @@
         "createdAt": { "type": "string" }
       },
       "required": ["category", "action", "title", "timestamp"]
+    },
+    "videoReels": {
+      "title": "Video Reels",
+      "description": "TikTok live hub video showcases and setups",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "duration": { "type": "string" },
+        "viewsCount": { "type": "string" },
+        "likesCount": { "type": "string" },
+        "badge": { "type": "string" },
+        "tiktokHandle": { "type": "string" },
+        "description": { "type": "string" }
+      }
     }
   }
 }

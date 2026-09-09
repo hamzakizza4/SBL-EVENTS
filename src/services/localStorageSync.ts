@@ -8,7 +8,9 @@ import {
   Testimonial, 
   InventoryItem,
   SiteAnnouncement,
-  ActivityLog
+  ActivityLog,
+  VideoReel,
+  TikTokSectionConfig
 } from '../types';
 
 export const STORAGE_KEYS = {
@@ -27,7 +29,9 @@ export const STORAGE_KEYS = {
   BUFFER_AFTER: 'sbl_events_buffer_after_v1',
   CATEGORIES: 'sbl_events_categories_v1',
   ANNOUNCEMENT: 'sbl_events_announcement_v1',
-  ACTIVITY_LOGS: 'sbl_events_activity_logs_v1'
+  ACTIVITY_LOGS: 'sbl_events_activity_logs_v1',
+  VIDEO_REELS: 'sbl_events_video_reels_v1',
+  TIKTOK_CONFIG: 'sbl_events_tiktok_config_v1'
 } as const;
 
 // Helper to safely get parsed item from localStorage
@@ -310,6 +314,36 @@ export const deleteActivityLogFromStore = async (id: string): Promise<void> => {
 
 export const clearAllActivityLogsFromStore = async (_ids?: string[]): Promise<void> => {
   setLocalItem(STORAGE_KEYS.ACTIVITY_LOGS, []);
+};
+
+// 11. TikTok Reels & Live Hub Local Store
+export const getVideoReelsFromStore = (fallback: VideoReel[]): VideoReel[] => {
+  return getLocalItem<VideoReel[]>(STORAGE_KEYS.VIDEO_REELS, fallback);
+};
+
+export const saveVideoReelToStore = async (reel: VideoReel): Promise<void> => {
+  const reels = getLocalItem<VideoReel[]>(STORAGE_KEYS.VIDEO_REELS, []);
+  const index = reels.findIndex(r => r.id === reel.id);
+  if (index >= 0) {
+    reels[index] = reel;
+  } else {
+    reels.push(reel);
+  }
+  setLocalItem(STORAGE_KEYS.VIDEO_REELS, reels);
+};
+
+export const deleteVideoReelFromStore = async (id: string): Promise<void> => {
+  const reels = getLocalItem<VideoReel[]>(STORAGE_KEYS.VIDEO_REELS, []);
+  const filtered = reels.filter(r => r.id !== id);
+  setLocalItem(STORAGE_KEYS.VIDEO_REELS, filtered);
+};
+
+export const getTikTokConfigFromStore = (fallback: TikTokSectionConfig): TikTokSectionConfig => {
+  return getLocalItem<TikTokSectionConfig>(STORAGE_KEYS.TIKTOK_CONFIG, fallback);
+};
+
+export const saveTikTokConfigToStore = async (config: TikTokSectionConfig): Promise<void> => {
+  setLocalItem(STORAGE_KEYS.TIKTOK_CONFIG, config);
 };
 
 // --- Initial Data Seeding Helper ---

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAdminContentSync } from '../context/AdminContentSyncContext';
+import { VideoReel } from '../types';
 import { COMPANY_CONTACT_INFO, VIDEO_REELS } from '../data/mockData';
 import kwanjulaRoyalStageImg from '../assets/images/kwanjula_royal_stage_1787463864885.jpg';
 import sblMegaTentImg from '../assets/images/sbl_mega_tent_1787463878262.jpg';
@@ -62,6 +64,8 @@ export const HomeView: React.FC = () => {
     openSplashScreen,
     theme
   } = useApp();
+
+  const { videoReels, tiktokConfig } = useAdminContentSync();
 
   const t = getThemeClasses(theme);
 
@@ -129,7 +133,7 @@ export const HomeView: React.FC = () => {
   const [guestCount, setGuestCount] = useState<number>(500);
 
   // Video Reel Modal Preview State
-  const [activeVideoModal, setActiveVideoModal] = useState<typeof VIDEO_REELS[0] | null>(null);
+  const [activeVideoModal, setActiveVideoModal] = useState<VideoReel | null>(null);
 
   const upcomingShowcases = calendarEvents.slice(0, 3);
   const featuredTestimonials = testimonials.filter((test) => test.featured || test.rating === 5).slice(0, 3);
@@ -547,25 +551,25 @@ export const HomeView: React.FC = () => {
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-bold">
               <Film className="w-3.5 h-3.5 text-amber-400" />
-              <span>Official TikTok Hub • 70,000+ Impressions</span>
+              <span>{tiktokConfig?.badgeText || tiktokConfig?.badge || 'Official TikTok Hub • 70,000+ Impressions'}</span>
             </div>
             <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight font-['Outfit']">
-              Experience SBL Live on TikTok
+              {tiktokConfig?.sectionTitle || tiktokConfig?.title || 'Experience SBL Live on TikTok'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Watch real live setups in Masaka, Lwengo & across Uganda — from luxury Kwanjula introductions to modular Mega Tents, curved LED video walls, and computerized moving beam light shows.
+              {tiktokConfig?.sectionSubtitle || tiktokConfig?.subtitle || tiktokConfig?.description || 'Watch real live setups in Masaka, Lwengo & across Uganda — from luxury Kwanjula introductions to modular Mega Tents, curved LED video walls, and computerized moving beam light shows.'}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <a
-              href="https://vm.tiktok.com/ZS9BfEAJpnj3Y-51DZa/"
+              href={tiktokConfig?.profileUrl || tiktokConfig?.tiktokUrl || 'https://vm.tiktok.com/ZS9BfEAJpnj3Y-51DZa/'}
               target="_blank"
               rel="noopener noreferrer"
               className="px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-rose-600 hover:brightness-110 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-lg transition-all transform hover:scale-105"
             >
               <Film className="w-4 h-4" />
-              <span>Visit @sblofficial92</span>
+              <span>{tiktokConfig?.buttonLabel || `Visit ${tiktokConfig?.tiktokHandle || '@sblofficial92'}`}</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
 
@@ -581,7 +585,7 @@ export const HomeView: React.FC = () => {
 
         {/* 4-Column Live Video Reels Cards - Jumia-style 2-column on mobile */}
         <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5" staggerDelay={0.09}>
-          {VIDEO_REELS.map((reel) => (
+          {((videoReels && videoReels.length > 0) ? videoReels : VIDEO_REELS).map((reel) => (
             <StaggerItem key={reel.id}>
               <div
                 onClick={() => setActiveVideoModal(reel)}
@@ -1184,7 +1188,7 @@ export const HomeView: React.FC = () => {
                 </button>
 
                 <a
-                  href="https://vm.tiktok.com/ZS9BfEAJpnj3Y-51DZa/"
+                  href={activeVideoModal.videoUrl || tiktokConfig?.profileUrl || 'https://vm.tiktok.com/ZS9BfEAJpnj3Y-51DZa/'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 py-3 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:brightness-110 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md"

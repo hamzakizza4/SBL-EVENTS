@@ -49,6 +49,11 @@ service cloud.firestore {
       allow update, delete: if true;
     }
 
+    match /video_reels/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Client Inquiries & Bookings with Input Validation
     match /bookings/{bookingId} {
       allow read: if true;

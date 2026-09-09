@@ -8,7 +8,7 @@ import {
   getDocs,
   writeBatch
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { 
   CalendarEvent, 
   Booking, 
@@ -19,7 +19,9 @@ import {
   Testimonial, 
   InventoryItem,
   SiteAnnouncement,
-  ActivityLog
+  ActivityLog,
+  VideoReel,
+  TikTokSectionConfig
 } from '../types';
 
 export const COLLECTIONS = {
@@ -32,7 +34,8 @@ export const COLLECTIONS = {
   TESTIMONIALS: 'testimonials',
   INVENTORY: 'inventory',
   SETTINGS: 'site_settings',
-  ACTIVITY_LOGS: 'activity_logs'
+  ACTIVITY_LOGS: 'activity_logs',
+  VIDEO_REELS: 'video_reels'
 } as const;
 
 export enum OperationType {
@@ -57,14 +60,15 @@ export interface FirestoreErrorInfo {
 
 export function handleFirestoreError(error: unknown, operation: OperationType, path: string | null = null): FirestoreErrorInfo {
   const errMessage = error instanceof Error ? error.message : String(error);
+  const currentUser = auth?.currentUser;
   const info: FirestoreErrorInfo = {
     error: errMessage,
     operation,
     path,
     authInfo: {
-      userId: null,
-      email: null,
-      isAuthenticated: false
+      userId: currentUser?.uid || null,
+      email: currentUser?.email || null,
+      isAuthenticated: Boolean(currentUser)
     }
   };
   console.error('[Firestore Error]', JSON.stringify(info));
@@ -225,6 +229,30 @@ export const subscribeToActivityLogs = (callback: (logs: ActivityLog[]) => void)
     callback(logs);
   }, (err) => {
     console.warn('[Firestore] Activity logs sync listener notice:', err.message);
+  });
+};
+
+export const subscribeToVideoReels = (callback: (reels: VideoReel[]) => void) => {
+  const colRef = collection(db, COLLECTIONS.VIDEO_REELS);
+  return onSnapshot(colRef, (snapshot) => {
+    const reels: VideoReel[] = [];
+    snapshot.forEach((docSnap) => {
+      reels.push({ id: docSnap.id, ...(docSnap.data() as Omit<VideoReel, 'id'>) });
+    });
+    callback(reels);
+  }, (err) => {
+    console.warn('[Firestore] Video reels sync listener notice:', err.message);
+  });
+};
+
+export const subscribeToTikTokConfig = (callback: (config: TikTokSectionConfig) => void) => {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, 'tiktok_section');
+  return onSnapshot(docRef, (snapshot) => {
+    if (snapshot.exists()) {
+      callback(snapshot.data() as TikTokSectionConfig);
+    }
+  }, (err) => {
+    console.warn('[Firestore] TikTok config sync listener notice:', err.message);
   });
 };
 
@@ -471,6 +499,40 @@ export const clearAllActivityLogsFromFirestore = async (logIds: string[]) => {
     await batch.commit();
   } catch (err) {
     console.error('Error clearing activity logs from Firestore:', err);
+  }
+};
+
+// 11. TikTok Reels & Live Hub Firestore Sync
+export const saveVideoReelToFirestore = async (reel: VideoReel): Promise<boolean> => {
+  try {
+    const docRef = doc(db, COLLECTIONS.VIDEO_REELS, reel.id);
+    await setDoc(docRef, cleanData(reel), { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[Firestore] Error saving video reel to Firestore:', err);
+    throw err;
+  }
+};
+
+export const deleteVideoReelFromFirestore = async (id: string): Promise<boolean> => {
+  try {
+    const docRef = doc(db, COLLECTIONS.VIDEO_REELS, id);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error('[Firestore] Error deleting video reel from Firestore:', err);
+    throw err;
+  }
+};
+
+export const saveTikTokConfigToFirestore = async (config: TikTokSectionConfig): Promise<boolean> => {
+  try {
+    const docRef = doc(db, COLLECTIONS.SETTINGS, 'tiktok_section');
+    await setDoc(docRef, cleanData(config), { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[Firestore] Error saving TikTok section config to Firestore:', err);
+    throw err;
   }
 };
 

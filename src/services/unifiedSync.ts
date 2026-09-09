@@ -8,7 +8,9 @@ import {
   Testimonial, 
   InventoryItem,
   SiteAnnouncement,
-  ActivityLog
+  ActivityLog,
+  VideoReel,
+  TikTokSectionConfig
 } from '../types';
 
 import {
@@ -35,6 +37,11 @@ import {
   saveActivityLogToStore,
   deleteActivityLogFromStore,
   clearAllActivityLogsFromStore,
+  saveVideoReelToStore,
+  deleteVideoReelFromStore,
+  saveTikTokConfigToStore,
+  getVideoReelsFromStore,
+  getTikTokConfigFromStore,
   subscribeToLocalStore,
   STORAGE_KEYS,
   setLocalItem
@@ -64,6 +71,9 @@ import {
   saveActivityLogToFirestore,
   deleteActivityLogFromFirestore,
   clearAllActivityLogsFromFirestore,
+  saveVideoReelToFirestore,
+  deleteVideoReelFromFirestore,
+  saveTikTokConfigToFirestore,
   subscribeToCalendarEvents,
   subscribeToBookings,
   subscribeToServices,
@@ -74,6 +84,8 @@ import {
   subscribeToInventory,
   subscribeToSiteSettings,
   subscribeToActivityLogs,
+  subscribeToVideoReels,
+  subscribeToTikTokConfig,
   seedInitialDataIfEmpty as seedFirestoreIfEmpty
 } from './firestoreSync';
 
@@ -92,6 +104,10 @@ export {
   subscribeToInventory,
   subscribeToSiteSettings,
   subscribeToActivityLogs,
+  subscribeToVideoReels,
+  subscribeToTikTokConfig,
+  getVideoReelsFromStore,
+  getTikTokConfigFromStore,
   seedFirestoreIfEmpty
 };
 
@@ -263,5 +279,27 @@ export const syncClearAllActivityLogs = async (ids: string[]): Promise<void> => 
   await Promise.allSettled([
     clearAllActivityLogsFromStore(ids),
     clearAllActivityLogsFromFirestore(ids)
+  ]);
+};
+
+// 11. TikTok Reels & Live Hub
+export const syncSaveVideoReel = async (reel: VideoReel): Promise<void> => {
+  await Promise.allSettled([
+    saveVideoReelToStore(reel),
+    saveVideoReelToFirestore(reel)
+  ]);
+};
+
+export const syncDeleteVideoReel = async (id: string): Promise<void> => {
+  await Promise.allSettled([
+    deleteVideoReelFromStore(id),
+    deleteVideoReelFromFirestore(id)
+  ]);
+};
+
+export const syncSaveTikTokConfig = async (config: TikTokSectionConfig): Promise<void> => {
+  await Promise.allSettled([
+    saveTikTokConfigToStore(config),
+    saveTikTokConfigToFirestore(config)
   ]);
 };

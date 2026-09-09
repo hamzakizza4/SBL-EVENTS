@@ -83,6 +83,7 @@ import { AdminMonthlyCalendar } from './AdminMonthlyCalendar';
 import { AdminBookingsTableSkeleton, AdminAnalyticsSkeleton, AdminPaymentsSkeleton } from './AdminSkeletonLoader';
 import { AdminToastNotificationSystem } from './AdminToastNotificationSystem';
 import { AdminActivityLogsSection } from './AdminActivityLogsSection';
+import { AdminTikTokSection } from './AdminTikTokSection';
 import { SwipeableBookingCard } from './SwipeableBookingCard';
 import { DeleteBookingModal } from './DeleteBookingModal';
 import { Camera, History } from 'lucide-react';
@@ -145,7 +146,7 @@ export const AdminDashboard: React.FC = () => {
   const [showDemoPasscodes, setShowDemoPasscodes] = useState(false);
   
   // Dashboard Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'bookings' | 'categories' | 'gallery' | 'services-media' | 'callbacks' | 'employees' | 'calendar' | 'inventory' | 'testimonials' | 'activity_logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'bookings' | 'categories' | 'gallery' | 'services-media' | 'callbacks' | 'employees' | 'calendar' | 'inventory' | 'testimonials' | 'activity_logs' | 'tiktok'>('overview');
 
   // Bookings Tab Filter/Search & Expandable Rows State
   const [searchQuery, setSearchQuery] = useState('');
@@ -1215,6 +1216,11 @@ export const AdminDashboard: React.FC = () => {
             id: 'activity_logs', 
             label: `Activity Logs (${activityLogs.length})`, 
             icon: <History className="w-4 h-4 text-emerald-400" /> 
+          },
+          { 
+            id: 'tiktok', 
+            label: 'TikTok Live Hub', 
+            icon: <Sparkles className="w-4 h-4 text-cyan-300" /> 
           },
         ].map((tab) => {
           const isActive = activeTab === tab.id;
@@ -2608,6 +2614,13 @@ export const AdminDashboard: React.FC = () => {
             showToast('Settings & Controls', 'Navigated to Dashboard Operations settings.', 'info');
           }}
         />
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB: TIKTOK LIVE HUB & SHOWCASE REELS */}
+      {/* ========================================================= */}
+      {activeTab === 'tiktok' && (
+        <AdminTikTokSection />
       )}
 
       {/* ========================================================= */}

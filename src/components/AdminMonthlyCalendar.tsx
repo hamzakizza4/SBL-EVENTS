@@ -23,6 +23,8 @@ import {
   Layers,
   Sparkles,
   AlertCircle,
+  AlertTriangle,
+  RotateCcw,
   Sliders,
   X,
   User,
@@ -52,6 +54,7 @@ export const AdminMonthlyCalendar: React.FC<AdminMonthlyCalendarProps> = ({
     setBufferDaysBefore,
     setBufferDaysAfter,
     updateBookingStatus,
+    deleteBooking,
     deleteCalendarEvent,
     triggerMockEmailConfirmation,
     showToast 
@@ -63,6 +66,15 @@ export const AdminMonthlyCalendar: React.FC<AdminMonthlyCalendarProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'pending' | 'available'>('all');
   const [eventTypeFilter, setEventTypeFilter] = useState<string>('all');
   const [isBufferSettingsOpen, setIsBufferSettingsOpen] = useState<boolean>(false);
+
+  // Modal states for deleting confirmed date / booking
+  const [deleteDateModalTarget, setDeleteDateModalTarget] = useState<{
+    dateStr: string;
+    confirmedBookings: Booking[];
+    bookedCalEvents: CalendarEvent[];
+  } | null>(null);
+
+  const [deleteSingleModalTarget, setDeleteSingleModalTarget] = useState<Booking | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -604,29 +616,52 @@ export const AdminMonthlyCalendar: React.FC<AdminMonthlyCalendarProps> = ({
                   })}
                 </h3>
 
-                {/* Day status badge */}
-                <div className="pt-1 flex items-center gap-2 flex-wrap">
-                  {selectedDayInfo.confirmedCount > 0 ? (
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{selectedDayInfo.confirmedCount} Confirmed Event{selectedDayInfo.confirmedCount > 1 ? 's' : ''}</span>
-                    </span>
-                  ) : selectedDayInfo.hasBuffer ? (
-                    <span className="px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/40 text-blue-300 text-xs font-bold flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Protected Buffer Day ({selectedDayInfo.bufferInfo?.reason || 'Rigging'})</span>
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 text-xs font-bold flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                      <span>100% Available for New Booking</span>
-                    </span>
-                  )}
+                {/* Day status badge & Delete Confirmed Date action */}
+                <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {selectedDayInfo.confirmedCount > 0 ? (
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{selectedDayInfo.confirmedCount} Confirmed Event{selectedDayInfo.confirmedCount > 1 ? 's' : ''}</span>
+                      </span>
+                    ) : selectedDayInfo.hasBuffer ? (
+                      <span className="px-2.5 py-1 rounded-full bg-blue-500/20 border border-blue-500/40 text-blue-300 text-xs font-bold flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Protected Buffer Day ({selectedDayInfo.bufferInfo?.reason || 'Rigging'})</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 text-xs font-bold flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                        <span>100% Available for New Booking</span>
+                      </span>
+                    )}
 
-                  {selectedDayInfo.pendingCount > 0 && (
-                    <span className="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
-                      {selectedDayInfo.pendingCount} Pending Inquiry
-                    </span>
+                    {selectedDayInfo.pendingCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
+                        {selectedDayInfo.pendingCount} Pending Inquiry
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Prominent Option to Delete Confirmed Date */}
+                  {selectedDayInfo.confirmedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const confirmedBookings = selectedDayInfo.dayBookings.filter(b => b.status === 'confirmed');
+                        const bookedCalEvents = selectedDayInfo.dayCalEvents.filter(e => e.status === 'booked');
+                        setDeleteDateModalTarget({
+                          dateStr: selectedDateStr,
+                          confirmedBookings,
+                          bookedCalEvents
+                        });
+                      }}
+                      className="px-3 py-1 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 hover:text-red-200 border border-red-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
+                      title="Permanently remove all confirmed reservations on this date and make it open"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                      <span>Delete Confirmed Date</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -689,7 +724,7 @@ export const AdminMonthlyCalendar: React.FC<AdminMonthlyCalendarProps> = ({
 
                       {/* Action buttons */}
                       <div className="flex items-center gap-1.5 pt-1 flex-wrap">
-                        {b.status !== 'confirmed' && (
+                        {b.status !== 'confirmed' ? (
                           <button
                             onClick={() => updateBookingStatus(b.id, 'confirmed')}
                             className="flex-1 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1"
@@ -697,6 +732,35 @@ export const AdminMonthlyCalendar: React.FC<AdminMonthlyCalendarProps> = ({
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Confirm</span>
                           </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateBookingStatus(b.id, 'pending');
+                                showToast(
+                                  'Date Unconfirmed',
+                                  `Booking for ${b.clientName} moved back to pending inquiry. Calendar date freed.`,
+                                  'info'
+                                );
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Unconfirm booking & release date back to pending inquiry"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Unconfirm</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDeleteSingleModalTarget(b)}
+                              className="px-2.5 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 hover:text-red-200 border border-red-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Delete confirmed booking and remove reservation from calendar"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete Date</span>
+                            </button>
+                          </>
                         )}
 
                         <a
@@ -782,6 +846,203 @@ export const AdminMonthlyCalendar: React.FC<AdminMonthlyCalendarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* MODAL: DELETE ALL CONFIRMED BOOKINGS FOR DATE */}
+      <AnimatePresence>
+        {deleteDateModalTarget && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setDeleteDateModalTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-[#0F1F38] border border-red-500/40 rounded-3xl p-6 shadow-2xl text-white space-y-5"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center border border-red-500/30">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-red-400">
+                      Calendar Schedule Management
+                    </span>
+                    <h3 className="text-base font-extrabold text-white">
+                      Delete Confirmed Date?
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeleteDateModalTarget(null)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0B1528] border border-white/10 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-bold">Target Date:</span>
+                  <span className="font-mono font-bold text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                    {deleteDateModalTarget.dateStr}
+                  </span>
+                </div>
+                <div className="text-slate-300 leading-relaxed">
+                  You are about to delete <strong className="text-white">{deleteDateModalTarget.confirmedBookings.length} confirmed event booking(s)</strong>
+                  {deleteDateModalTarget.bookedCalEvents.length > 0 && ` and ${deleteDateModalTarget.bookedCalEvents.length} calendar fixture(s)`}.
+                </div>
+
+                <div className="mt-2 space-y-1 max-h-36 overflow-y-auto">
+                  {deleteDateModalTarget.confirmedBookings.map((b) => (
+                    <div key={b.id} className="p-2 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between">
+                      <span className="font-bold text-white truncate max-w-[180px]">{b.clientName}</span>
+                      <span className="font-mono text-amber-300 text-[11px]">{formatUGX(b.estimatedTotal)}</span>
+                    </div>
+                  ))}
+                  {deleteDateModalTarget.bookedCalEvents.map((e) => (
+                    <div key={e.id} className="p-2 rounded-lg bg-purple-900/20 border border-purple-500/20 flex items-center justify-between">
+                      <span className="font-bold text-purple-200 truncate">{e.title}</span>
+                      <span className="text-[10px] text-purple-300">Custom Hold</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-200 text-xs">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <p>
+                  This frees this calendar date completely so other clients can book it immediately. This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteDateModalTarget(null)}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 font-semibold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const count = deleteDateModalTarget.confirmedBookings.length + deleteDateModalTarget.bookedCalEvents.length;
+                    deleteDateModalTarget.confirmedBookings.forEach((b) => deleteBooking(b.id));
+                    deleteDateModalTarget.bookedCalEvents.forEach((e) => deleteCalendarEvent(e.id));
+                    showToast(
+                      'Confirmed Date Deleted',
+                      `Removed ${count} reservation(s) on ${deleteDateModalTarget.dateStr}. Date is now open for new events.`,
+                      'warning'
+                    );
+                    setDeleteDateModalTarget(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Yes, Delete Confirmed Date</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: DELETE INDIVIDUAL CONFIRMED BOOKING */}
+      <AnimatePresence>
+        {deleteSingleModalTarget && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setDeleteSingleModalTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-[#0F1F38] border border-red-500/40 rounded-3xl p-6 shadow-2xl text-white space-y-5"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center border border-red-500/30">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-red-400">
+                      Delete Confirmed Booking
+                    </span>
+                    <h3 className="text-base font-extrabold text-white">
+                      Remove Booking & Free Date
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeleteSingleModalTarget(null)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#0B1528] border border-white/10 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-amber-300 font-bold bg-amber-400/10 px-2 py-0.5 rounded">
+                    {deleteSingleModalTarget.referenceNumber}
+                  </span>
+                  <span className="text-amber-400 font-black font-mono">
+                    {formatUGX(deleteSingleModalTarget.estimatedTotal)}
+                  </span>
+                </div>
+                <h4 className="font-extrabold text-white text-sm">
+                  {deleteSingleModalTarget.clientName}
+                </h4>
+                <div className="text-slate-300 flex items-center gap-2">
+                  <span>📅 {deleteSingleModalTarget.eventDate}</span>
+                  <span>•</span>
+                  <span className="capitalize">{deleteSingleModalTarget.eventType.replace('_', ' ')}</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-200 text-xs">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <p>
+                  Permanently deletes this confirmed event and removes the date lock on the monthly calendar.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteSingleModalTarget(null)}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 font-semibold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteBooking(deleteSingleModalTarget.id);
+                    showToast(
+                      'Booking Deleted',
+                      `Deleted confirmed booking for ${deleteSingleModalTarget.clientName} (${deleteSingleModalTarget.eventDate}).`,
+                      'warning'
+                    );
+                    setDeleteSingleModalTarget(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Confirmed Date</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

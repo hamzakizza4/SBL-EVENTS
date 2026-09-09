@@ -19,7 +19,9 @@ import {
   AdminLiveAlert,
   AdminAlertCategory,
   ActivityLog,
-  ActivityLogCategory
+  ActivityLogCategory,
+  CardEditorType,
+  CardEditorItem
 } from '../types';
 import { playAdminBookingChime } from '../utils/audioAlert';
 import { EmailConfirmationData } from '../components/EmailConfirmationModal';
@@ -230,6 +232,11 @@ interface AppContextType {
     onAction?: () => void
   ) => void;
   removeToast: (id: string) => void;
+
+  // Admin Card Quick Editor Modal
+  cardEditorItem: CardEditorItem | null;
+  openCardEditor: (type: CardEditorType, data: any) => void;
+  closeCardEditor: () => void;
 
   // Booking loading state & Firestore Perceived Performance
   isBookingsLoading: boolean;
@@ -480,6 +487,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Global Toasts State
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Admin Card Quick Editor State
+  const [cardEditorItem, setCardEditorItem] = useState<CardEditorItem | null>(null);
+
+  const openCardEditor = useCallback((type: CardEditorType, data: any) => {
+    setCardEditorItem({ type, data });
+  }, []);
+
+  const closeCardEditor = useCallback(() => {
+    setCardEditorItem(null);
+  }, []);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -2215,6 +2233,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toasts,
         showToast,
         removeToast,
+        cardEditorItem,
+        openCardEditor,
+        closeCardEditor,
         isBookingsLoading,
         fastSync,
         simulateFirestoreFetch,

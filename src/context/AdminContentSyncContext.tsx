@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { Service, GalleryItem, ServiceCategory } from '../types';
-import { INITIAL_SERVICES, GALLERY_ITEMS } from '../data/mockData';
+import { Service, GalleryItem, ServiceCategory, VideoReel, TikTokSectionConfig } from '../types';
+import { INITIAL_SERVICES, GALLERY_ITEMS, VIDEO_REELS, DEFAULT_TIKTOK_SECTION_CONFIG } from '../data/mockData';
 import { 
   subscribeToServices, 
   subscribeToGallery, 
@@ -8,6 +8,11 @@ import {
   deleteServiceFromFirestore, 
   saveGalleryItemToFirestore, 
   deleteGalleryItemFromFirestore,
+  subscribeToVideoReels,
+  subscribeToTikTokConfig,
+  saveVideoReelToFirestore,
+  deleteVideoReelFromFirestore,
+  saveTikTokConfigToFirestore,
   cleanData
 } from '../services/firestoreSync';
 import { 
@@ -15,6 +20,9 @@ import {
   deleteServiceFromStore, 
   saveGalleryItemToStore, 
   deleteGalleryItemFromStore,
+  saveVideoReelToStore,
+  deleteVideoReelFromStore,
+  saveTikTokConfigToStore,
   setLocalItem,
   STORAGE_KEYS
 } from '../services/localStorageSync';
@@ -26,6 +34,8 @@ export interface AdminContentSyncContextType {
   // Live State (Reflected across all views)
   services: Service[];
   galleryItems: GalleryItem[];
+  videoReels: VideoReel[];
+  tiktokConfig: TikTokSectionConfig;
   
   // Real-time Cloud Sync Telemetry
   syncStatus: ContentSyncStatus;
@@ -55,6 +65,14 @@ export interface AdminContentSyncContextType {
   deleteGalleryItem: (id: string) => Promise<boolean>;
   resetGalleryToDefault: () => Promise<boolean>;
 
+  // TikTok Live Showcase & Reels Operations (Guaranteed Firestore Persistence)
+  addVideoReel: (reelData: Omit<VideoReel, 'id'> & { id?: string }) => Promise<VideoReel>;
+  updateVideoReel: (id: string, updates: Partial<VideoReel>) => Promise<boolean>;
+  deleteVideoReel: (id: string) => Promise<boolean>;
+  resetVideoReelsToDefault: () => Promise<boolean>;
+  updateTikTokConfig: (updates: Partial<TikTokSectionConfig>) => Promise<boolean>;
+  resetTikTokConfigToDefault: () => Promise<boolean>;
+
   // Maintenance & Portability Handlers
   forceRefreshFromCloud: () => Promise<void>;
   retryPendingSync: () => Promise<void>;
@@ -62,11 +80,13 @@ export interface AdminContentSyncContextType {
 
 const LOCAL_STORAGE_SERVICES_KEY = 'sbl_services_catalog_v2';
 const LOCAL_STORAGE_GALLERY_KEY = 'sbl_gallery_showcase_v2';
+const LOCAL_STORAGE_REELS_KEY = 'sbl_video_reels_v2';
+const LOCAL_STORAGE_TIKTOK_CONFIG_KEY = 'sbl_tiktok_config_v2';
 const LOCAL_STORAGE_PENDING_QUEUE_KEY = 'sbl_pending_content_sync_queue';
 
 interface PendingSyncAction {
   id: string;
-  type: 'save_service' | 'delete_service' | 'save_gallery' | 'delete_gallery';
+  type: 'save_service' | 'delete_service' | 'save_gallery' | 'delete_gallery' | 'save_reel' | 'delete_reel' | 'save_tiktok_config';
   data?: any;
   targetId: string;
   timestamp: number;
@@ -100,6 +120,32 @@ export const AdminContentSyncProvider: React.FC<{ children: React.ReactNode }> =
       // ignore
     }
     return GALLERY_ITEMS;
+  });
+
+  const [videoReels, setVideoReels] = useState<VideoReel[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_REELS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return VIDEO_REELS;
+  });
+
+  const [tiktokConfig, setTiktokConfig] = useState<TikTokSectionConfig>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_TIKTOK_CONFIG_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.title) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_TIKTOK_SECTION_CONFIG;
   });
 
   // 2. Cloud Synchronization Status Tracking
@@ -166,6 +212,12 @@ export const AdminContentSyncProvider: React.FC<{ children: React.ReactNode }> =
           await saveGalleryItemToFirestore(action.data);
         } else if (action.type === 'delete_gallery') {
           await deleteGalleryItemFromFirestore(action.targetId);
+        } else if (action.type === 'save_reel' && action.data) {
+          await saveVideoReelToFirestore(action.data);
+        } else if (action.type === 'delete_reel') {
+          await deleteVideoReelFromFirestore(action.targetId);
+        } else if (action.type === 'save_tiktok_config' && action.data) {
+          await saveTikTokConfigToFirestore(action.data);
         }
       } catch (err) {
         console.warn('[ContentSync] Failed to flush queued sync item:', action, err);
@@ -252,10 +304,55 @@ export const AdminContentSyncProvider: React.FC<{ children: React.ReactNode }> =
       }
     });
 
+    // C. Subscribe to Video Reels in Cloud Firestore
+    const unsubReels = subscribeToVideoReels((cloudReels) => {
+      if (!isSubscribed) return;
+      if (cloudReels && cloudReels.length > 0) {
+        setVideoReels(cloudReels);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_REELS_KEY, JSON.stringify(cloudReels));
+          setLocalItem(STORAGE_KEYS.VIDEO_REELS, cloudReels);
+        } catch {
+          // ignore
+        }
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date());
+        setIsCloudConnected(true);
+      } else if (cloudReels && cloudReels.length === 0) {
+        console.log('[ContentSync] Fresh Firestore detected. Bootstrapping default video reels...');
+        VIDEO_REELS.forEach((reel) => {
+          saveVideoReelToFirestore(reel).catch((err) => console.warn('[ContentSync] Auto-seed reel error:', err));
+        });
+      }
+    });
+
+    // D. Subscribe to TikTok Section Config
+    const unsubTikTokConfig = subscribeToTikTokConfig((cloudConfig) => {
+      if (!isSubscribed) return;
+      if (cloudConfig && cloudConfig.title) {
+        setTiktokConfig(cloudConfig);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_TIKTOK_CONFIG_KEY, JSON.stringify(cloudConfig));
+          setLocalItem(STORAGE_KEYS.TIKTOK_CONFIG, cloudConfig);
+        } catch {
+          // ignore
+        }
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date());
+        setIsCloudConnected(true);
+      } else {
+        saveTikTokConfigToFirestore(DEFAULT_TIKTOK_SECTION_CONFIG).catch((err) =>
+          console.warn('[ContentSync] Auto-seed tiktok config error:', err)
+        );
+      }
+    });
+
     return () => {
       isSubscribed = false;
       if (typeof unsubServices === 'function') unsubServices();
       if (typeof unsubGallery === 'function') unsubGallery();
+      if (typeof unsubReels === 'function') unsubReels();
+      if (typeof unsubTikTokConfig === 'function') unsubTikTokConfig();
     };
   }, []);
 
@@ -603,11 +700,195 @@ export const AdminContentSyncProvider: React.FC<{ children: React.ReactNode }> =
     }
   }, []);
 
+  // ====================================================
+  // TIKTOK LIVE SHOWCASE & REELS OPERATIONS
+  // ====================================================
+
+  const addVideoReel = useCallback(async (reelData: Omit<VideoReel, 'id'> & { id?: string }): Promise<VideoReel> => {
+    const newId = reelData.id || `reel-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const newReel: VideoReel = {
+      ...reelData,
+      id: newId,
+    };
+
+    // 1. Optimistic React State update
+    setVideoReels((prev) => [newReel, ...prev]);
+
+    // 2. Local persistence
+    try {
+      saveVideoReelToStore(newReel).catch(console.error);
+      const updatedList = [newReel, ...videoReels];
+      localStorage.setItem(LOCAL_STORAGE_REELS_KEY, JSON.stringify(updatedList));
+    } catch (e) {
+      console.warn('[ContentSync] Local storage write warning:', e);
+    }
+
+    // 3. Cloud Firestore persistence
+    setSyncStatus('syncing');
+    try {
+      await saveVideoReelToFirestore(newReel);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+    } catch (err: any) {
+      console.error('[ContentSync] Cloud save failed for reel:', err);
+      enqueuePendingAction({ type: 'save_reel', targetId: newId, data: newReel });
+      setSyncStatus('offline');
+      setSyncError(err?.message || 'Reel saved locally, queued for cloud sync');
+    }
+
+    return newReel;
+  }, [videoReels]);
+
+  const updateVideoReel = useCallback(async (id: string, updates: Partial<VideoReel>): Promise<boolean> => {
+    let updatedTarget: VideoReel | null = null;
+
+    setVideoReels((prev) =>
+      prev.map((reel) => {
+        if (reel.id === id) {
+          updatedTarget = { ...reel, ...updates };
+          return updatedTarget;
+        }
+        return reel;
+      })
+    );
+
+    if (!updatedTarget) return false;
+
+    try {
+      saveVideoReelToStore(updatedTarget).catch(console.error);
+      const updatedList = videoReels.map((r) => (r.id === id ? updatedTarget! : r));
+      localStorage.setItem(LOCAL_STORAGE_REELS_KEY, JSON.stringify(updatedList));
+    } catch (e) {
+      console.warn('[ContentSync] Local storage write warning:', e);
+    }
+
+    setSyncStatus('syncing');
+    try {
+      await saveVideoReelToFirestore(updatedTarget);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+      return true;
+    } catch (err: any) {
+      console.error('[ContentSync] Cloud update failed for reel:', err);
+      enqueuePendingAction({ type: 'save_reel', targetId: id, data: updatedTarget });
+      setSyncStatus('offline');
+      setSyncError(err?.message || 'Updated locally, queued for cloud sync');
+      return true;
+    }
+  }, [videoReels]);
+
+  const deleteVideoReel = useCallback(async (id: string): Promise<boolean> => {
+    setVideoReels((prev) => prev.filter((reel) => reel.id !== id));
+
+    try {
+      deleteVideoReelFromStore(id).catch(console.error);
+      const updatedList = videoReels.filter((r) => r.id !== id);
+      localStorage.setItem(LOCAL_STORAGE_REELS_KEY, JSON.stringify(updatedList));
+    } catch (e) {
+      console.warn('[ContentSync] Local storage delete warning:', e);
+    }
+
+    setSyncStatus('syncing');
+    try {
+      await deleteVideoReelFromFirestore(id);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+      return true;
+    } catch (err: any) {
+      console.error('[ContentSync] Cloud delete failed for reel:', err);
+      enqueuePendingAction({ type: 'delete_reel', targetId: id });
+      setSyncStatus('offline');
+      setSyncError(err?.message || 'Deleted locally, queued for cloud sync');
+      return true;
+    }
+  }, [videoReels]);
+
+  const resetVideoReelsToDefault = useCallback(async (): Promise<boolean> => {
+    setVideoReels(VIDEO_REELS);
+
+    try {
+      localStorage.setItem(LOCAL_STORAGE_REELS_KEY, JSON.stringify(VIDEO_REELS));
+      VIDEO_REELS.forEach((reel) => saveVideoReelToStore(reel).catch(console.error));
+    } catch (e) {
+      console.warn('[ContentSync] Local storage reset warning:', e);
+    }
+
+    setSyncStatus('syncing');
+    try {
+      await Promise.all(VIDEO_REELS.map((reel) => saveVideoReelToFirestore(reel)));
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+      return true;
+    } catch (err: any) {
+      console.error('[ContentSync] Cloud reset reels error:', err);
+      setSyncStatus('offline');
+      setSyncError('Default reels restored locally; waiting for cloud sync.');
+      return true;
+    }
+  }, []);
+
+  const updateTikTokConfig = useCallback(async (updates: Partial<TikTokSectionConfig>): Promise<boolean> => {
+    const updated = { ...tiktokConfig, ...updates };
+    setTiktokConfig(updated);
+
+    try {
+      saveTikTokConfigToStore(updated).catch(console.error);
+      localStorage.setItem(LOCAL_STORAGE_TIKTOK_CONFIG_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('[ContentSync] Local storage write warning for tiktok config:', e);
+    }
+
+    setSyncStatus('syncing');
+    try {
+      await saveTikTokConfigToFirestore(updated);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+      return true;
+    } catch (err: any) {
+      console.error('[ContentSync] Cloud update failed for tiktok config:', err);
+      enqueuePendingAction({ type: 'save_tiktok_config', targetId: 'tiktok_section', data: updated });
+      setSyncStatus('offline');
+      setSyncError(err?.message || 'Config updated locally, queued for cloud sync');
+      return true;
+    }
+  }, [tiktokConfig]);
+
+  const resetTikTokConfigToDefault = useCallback(async (): Promise<boolean> => {
+    setTiktokConfig(DEFAULT_TIKTOK_SECTION_CONFIG);
+
+    try {
+      saveTikTokConfigToStore(DEFAULT_TIKTOK_SECTION_CONFIG).catch(console.error);
+      localStorage.setItem(LOCAL_STORAGE_TIKTOK_CONFIG_KEY, JSON.stringify(DEFAULT_TIKTOK_SECTION_CONFIG));
+    } catch (e) {
+      console.warn('[ContentSync] Local storage reset warning for tiktok config:', e);
+    }
+
+    setSyncStatus('syncing');
+    try {
+      await saveTikTokConfigToFirestore(DEFAULT_TIKTOK_SECTION_CONFIG);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+      return true;
+    } catch (err: any) {
+      console.error('[ContentSync] Cloud reset tiktok config error:', err);
+      setSyncStatus('offline');
+      return true;
+    }
+  }, []);
+
   return (
     <AdminContentSyncContext.Provider
       value={{
         services,
         galleryItems,
+        videoReels,
+        tiktokConfig,
         syncStatus,
         isSyncing: syncStatus === 'syncing',
         lastSyncedAt,
@@ -627,6 +908,12 @@ export const AdminContentSyncProvider: React.FC<{ children: React.ReactNode }> =
         updateGalleryItem,
         deleteGalleryItem,
         resetGalleryToDefault,
+        addVideoReel,
+        updateVideoReel,
+        deleteVideoReel,
+        resetVideoReelsToDefault,
+        updateTikTokConfig,
+        resetTikTokConfigToDefault,
         forceRefreshFromCloud,
         retryPendingSync,
       }}

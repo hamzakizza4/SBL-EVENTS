@@ -1,4 +1,4 @@
-import { Service, CalendarEvent, Testimonial, GalleryItem, InventoryItem, TeamMember, CallbackRequest, VideoReel, EventCategoryItem, ActivityLog } from '../types';
+import { Service, CalendarEvent, Testimonial, GalleryItem, InventoryItem, TeamMember, CallbackRequest, VideoReel, TikTokSectionConfig, EventCategoryItem, ActivityLog } from '../types';
 import kwanjulaRoyalStageImg from '../assets/images/kwanjula_royal_stage_1787463864885.jpg';
 import sblMegaTentImg from '../assets/images/sbl_mega_tent_1787463878262.jpg';
 import sblLedScreenImg from '../assets/images/sbl_led_screen_1787463891580.jpg';
@@ -864,6 +864,15 @@ export const VIDEO_REELS: VideoReel[] = [
     ugxEstimate: 2800000
   }
 ];
+
+export const DEFAULT_TIKTOK_SECTION_CONFIG: TikTokSectionConfig = {
+  badge: 'Official TikTok Hub • 70,000+ Impressions',
+  title: 'Experience SBL Live on TikTok',
+  description: 'Watch real live setups in Masaka, Lwengo & across Uganda — from luxury Kwanjula introductions to modular Mega Tents, curved LED video walls, and computerized moving beam light shows.',
+  tiktokUrl: 'https://vm.tiktok.com/ZS9BfEAJpnj3Y-51DZa/',
+  tiktokHandle: '@sblofficial92',
+  hotline: '0752420911',
+};
 
 export const INVENTORY_ITEMS: InventoryItem[] = [
   {

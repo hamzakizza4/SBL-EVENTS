@@ -25,6 +25,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { EmailConfirmationModal } from './components/EmailConfirmationModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { AdminCardEditModal } from './components/AdminCardEditModal';
 import { AnimatePresence, motion } from 'motion/react';
 import { getThemeClasses } from './utils/themeStyles';
 import { Lock, Crown, ShieldCheck } from 'lucide-react';
@@ -130,6 +131,7 @@ const AppContent: React.FC = () => {
       <GlobalSearchModal />
       <KeyboardShortcutsModal />
       <ToastContainer />
+      <AdminCardEditModal />
       <SplashScreen />
       <EmailConfirmationModal
         isOpen={isEmailModalOpen}

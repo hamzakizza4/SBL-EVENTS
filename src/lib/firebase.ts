@@ -1,5 +1,13 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  getFirestore, 
+  Firestore, 
+  FirestoreSettings,
+  doc,
+  getDocFromServer
+} from 'firebase/firestore';
+import { getAuth, Auth } from 'firebase/auth';
 import fallbackConfig from '../../firebase-applet-config.json';
 
 // Support both standard Vite environment variables (for Vercel, Netlify, Cloudflare, etc.)
@@ -23,22 +31,59 @@ if (!getApps().length) {
 }
 
 // Resilient Firestore instance initialization
-// Safely supports custom database IDs (like AI Studio) and default databases ('(default)')
+// CRITICAL: experimentalForceLongPolling: true prevents WebChannel streaming timeouts
+// ("Could not reach Cloud Firestore backend. Backend didn't respond within 10 seconds")
+// in proxied environments, Cloud Run containers, and browser sandboxed iframes.
+const firestoreSettings: FirestoreSettings = {
+  experimentalForceLongPolling: true,
+};
+
 let db: Firestore;
+const dbId = resolvedFirebaseConfig.firestoreDatabaseId;
+const isCustomDb = Boolean(dbId && dbId !== '(default)' && dbId !== 'default');
+
 try {
-  const dbId = resolvedFirebaseConfig.firestoreDatabaseId;
-  if (dbId && dbId !== '(default)' && dbId !== 'default') {
-    db = getFirestore(app, dbId);
+  if (isCustomDb) {
+    db = initializeFirestore(app, firestoreSettings, dbId);
   } else {
+    db = initializeFirestore(app, firestoreSettings);
+  }
+} catch {
+  // If Firestore is already initialized (e.g. during module HMR or multiple instances), retrieve existing instance
+  try {
+    if (isCustomDb) {
+      db = getFirestore(app, dbId);
+    } else {
+      db = getFirestore(app);
+    }
+  } catch (err) {
+    console.warn('[Firebase] Fallback to default getFirestore:', err);
     db = getFirestore(app);
   }
-} catch (err) {
-  console.warn('[Firebase] Database initialization notice, falling back to default database instance:', err);
-  db = getFirestore(app);
 }
+
+// Initialize Auth
+let auth: Auth;
+try {
+  auth = getAuth(app);
+} catch {
+  auth = getAuth();
+}
+
+// Validate Connection to Firestore on startup
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('[Firebase] Firestore offline notice: Client is operating in local/offline cache mode.');
+    }
+  }
+}
+testConnection();
 
 export const isFirebaseConfigured = (): boolean => {
   return Boolean(resolvedFirebaseConfig.apiKey && resolvedFirebaseConfig.projectId);
 };
 
-export { app, db };
+export { app, db, auth };
