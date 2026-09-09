@@ -3,367 +3,232 @@ import { useApp } from '../context/AppContext';
 import { Service } from '../types';
 import { getThemeClasses } from '../utils/themeStyles';
 import { 
+  sblStageBlueTrussImg, 
+  sblMegaTentImg, 
+  intelligentLightingShowcaseImg,
+  COMPANY_CONTACT_INFO 
+} from '../data/mockData';
+import { GeometricHeroBanner } from './GeometricHeroBanner';
+import { ScrollReveal, StaggerContainer, StaggerItem } from './ScrollReveal';
+import { 
   Layers, 
   CheckCircle2, 
   Calendar, 
   Info, 
-  ArrowRight, 
-  Sparkles, 
   Zap, 
   Tv, 
   Volume2, 
-  Mic2, 
   Sparkle, 
   Tent, 
   Bath, 
   Truck, 
-  SlidersHorizontal,
   X,
   Check,
-  ShieldCheck
+  Image as ImageIcon,
+  Video,
+  ExternalLink,
+  Play,
+  MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const ServicesView: React.FC = () => {
-  const { services, openBookingModal, theme } = useApp();
+  const { services, openBookingModal, theme, eventCategories } = useApp();
   const t = getThemeClasses(theme);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeServiceModal, setActiveServiceModal] = useState<Service | null>(null);
+  const [activeMediaTab, setActiveMediaTab] = useState<'photos' | 'videos'>('photos');
 
-  // Interactive Package Estimator State
-  const [estGuests, setEstGuests] = useState<number>(400);
-  const [estDays, setEstDays] = useState<number>(1);
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([
-    'mega-tents',
-    'intelligent-lighting',
-    'mobile-disco-sound',
-  ]);
-  const [selectedAddonKeys, setSelectedAddonKeys] = useState<{ [key: string]: boolean }>({
-    generator: true,
-    toilet: true,
-    mc: false,
-    led: false,
-    dryice: true,
-  });
+  const categories = React.useMemo(() => {
+    const base: { id: string; label: string; icon: React.ReactNode }[] = [
+      { id: 'all', label: 'All Services', icon: <Layers className="w-4 h-4" /> },
+      { id: 'tents', label: 'Mega Tents & Stages', icon: <Tent className="w-4 h-4" /> },
+      { id: 'lighting', label: 'Intelligent Lighting', icon: <Zap className="w-4 h-4" /> },
+      { id: 'screens', label: 'LED Video Screens', icon: <Tv className="w-4 h-4" /> },
+      { id: 'sound-mc', label: 'Mobile Disco & Sound', icon: <Volume2 className="w-4 h-4" /> },
+      { id: 'production', label: 'Decor & Planning', icon: <Sparkle className="w-4 h-4" /> },
+      { id: 'restrooms', label: 'Mobile Restrooms', icon: <Bath className="w-4 h-4" /> },
+      { id: 'b2b-lending', label: 'B2B Equipment Hire', icon: <Truck className="w-4 h-4" /> },
+    ];
 
-  const categories: { id: string; label: string; icon: React.ReactNode }[] = [
-    { id: 'all', label: 'All Services (10)', icon: <Layers className="w-4 h-4" /> },
-    { id: 'tents', label: 'Mega Tents & Stages', icon: <Tent className="w-4 h-4" /> },
-    { id: 'lighting', label: 'Intelligent Lighting', icon: <Zap className="w-4 h-4" /> },
-    { id: 'screens', label: 'LED Video Screens', icon: <Tv className="w-4 h-4" /> },
-    { id: 'sound-mc', label: 'Mobile Disco & MC', icon: <Volume2 className="w-4 h-4" /> },
-    { id: 'production', label: 'Decor & Planning', icon: <Sparkle className="w-4 h-4" /> },
-    { id: 'restrooms', label: 'Mobile Restrooms', icon: <Bath className="w-4 h-4" /> },
-    { id: 'b2b-lending', label: 'B2B Tent Lending', icon: <Truck className="w-4 h-4" /> },
-  ];
+    if (eventCategories && eventCategories.length > 0) {
+      eventCategories.filter(c => c.active).forEach((cat) => {
+        if (!base.some(b => b.id === cat.slug)) {
+          base.push({
+            id: cat.slug,
+            label: cat.name,
+            icon: <Sparkle className="w-4 h-4" />
+          });
+        }
+      });
+    }
+
+    return base;
+  }, [eventCategories]);
 
   const filteredServices = services.filter((s) => {
     if (selectedCategory === 'all') return true;
-    return s.category === selectedCategory;
+    if (s.category === selectedCategory) return true;
+    const matchCat = eventCategories?.find(c => c.slug === selectedCategory);
+    if (matchCat && matchCat.recommendedServices && matchCat.recommendedServices.length > 0) {
+      return matchCat.recommendedServices.includes(s.id);
+    }
+    return false;
   });
 
-  // Calculate Estimator Total
-  const baseCost = selectedServiceIds.reduce((sum, sId) => {
-    const s = services.find((srv) => srv.id === sId);
-    return sum + (s ? s.basePrice : 0);
-  }, 0);
-
-  const addonPrices: { [key: string]: number } = {
-    generator: 350,
-    toilet: 350,
-    mc: 400,
-    led: 800,
-    dryice: 150,
-  };
-
-  const addonsTotal = Object.entries(selectedAddonKeys).reduce((sum, [key, active]) => {
-    return sum + (active ? (addonPrices[key] || 0) : 0);
-  }, 0);
-
-  const guestScale = estGuests > 500 ? 1.3 : estGuests > 1000 ? 1.6 : 1.0;
-  const grandTotalEstimate = Math.round((baseCost * guestScale + addonsTotal) * estDays);
-
-  const toggleEstimatorService = (id: string) => {
-    setSelectedServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
-  };
-
-  const toggleEstimatorAddon = (key: string) => {
-    setSelectedAddonKeys((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   return (
-    <div id="services-view" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20 space-y-16">
+    <div id="services-view" className="w-full pb-20 space-y-10">
       
-      {/* Header */}
-      <div className="text-center max-w-3xl mx-auto space-y-4">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-white border border-white/20 text-xs font-bold shadow-xs">
-          <Layers className="w-4 h-4 text-blue-300" />
-          <span>Complete Event Inventory & Production Arsenal</span>
-        </div>
-        <h1 className={`text-3xl sm:text-5xl font-extrabold tracking-tight font-['Outfit'] ${t.headingText}`}>
-          Services, Equipment Hire & Tent Lending
-        </h1>
-        <p className={`text-xs sm:text-base leading-relaxed ${t.mutedText}`}>
-          Browse all 10 specialized services. Every booking includes certified rigging, master sound engineering, on-site backup generators, and transport logistics.
-        </p>
-      </div>
+      {/* 1. CINEMATIC GEOMETRIC HERO BANNER */}
+      <GeometricHeroBanner
+        badgeText="Official Equipment Hire & Production Catalogue"
+        badgeIcon={<Layers className="w-4 h-4 text-amber-300" />}
+        accentHeading="EQUIPMENT &amp; HIRE"
+        primaryHeading="PRODUCTION SERVICES CATALOGUE"
+        description="Explore our certified inventory of European clear-span marquees, heavy-duty stage trusses, P3.9 outdoor LED screens, digital line-array sound systems, and luxury VIP mobile restrooms."
+        mainImage={sblStageBlueTrussImg}
+        secondaryImage={sblMegaTentImg}
+        tertiaryImage={intelligentLightingShowcaseImg}
+        bgPatternImage={sblStageBlueTrussImg}
+        themeVariant="amber"
+        primaryCta={{
+          label: "Book Equipment Package",
+          onClick: () => openBookingModal(),
+          icon: <Calendar className="w-4 h-4" />
+        }}
+        secondaryCta={{
+          label: "WhatsApp Equipment Inquiry",
+          href: COMPANY_CONTACT_INFO.whatsappUrl,
+          isExternal: true,
+          variant: "whatsapp",
+          icon: <MessageCircle className="w-4 h-4" />
+        }}
+        customSlot={
+          /* Category Filter Pills */
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border shadow-xs cursor-pointer ${
+                  selectedCategory === cat.id
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 border-amber-400 font-black shadow-md shadow-amber-500/20'
+                    : 'bg-[#060B14]/80 text-slate-200 border-white/15 hover:bg-amber-400/20 hover:text-amber-200 backdrop-blur-sm'
+                }`}
+              >
+                {cat.icon}
+                <span>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+        }
+        stats={[
+          { value: "50kVA - 100kVA", label: "Cummins Power" },
+          { value: "1,500+ Seater", label: "Clear-Span Marquees" },
+          { value: "P3.9 High-Def", label: "Daylight LED Screens" }
+        ]}
+      />
 
-      {/* Category Filter Pills */}
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setSelectedCategory(cat.id)}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border shadow-xs ${
-              selectedCategory === cat.id
-                ? 'bg-white text-[#0F1F38] border-white font-bold shadow-md'
-                : 'bg-[#152A4A] text-slate-200 border-white/15 hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            {cat.icon}
-            <span>{cat.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* Main Container */}
+      <ScrollReveal className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10" yOffset={35}>
 
-      {/* Services Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {filteredServices.map((srv) => (
-          <div
-            key={srv.id}
-            className={`${t.cardBg} border ${t.cardBorder} hover:border-white/40 rounded-3xl overflow-hidden transition-all duration-300 shadow-xl flex flex-col justify-between group`}
-          >
-            <div>
-              {/* Media header */}
-              <div className="relative h-56 overflow-hidden bg-[#0A1830]">
-                <img
-                  src={srv.image}
-                  alt={srv.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#152A4A] via-black/20 to-transparent" />
-                
-                <div className="absolute top-3 left-3 bg-[#0F1F38]/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/20">
-                  ${srv.basePrice} {srv.priceUnit}
-                </div>
+      {/* Services Grid - Jumia-style 2-column compact layout on mobile */}
+      <StaggerContainer className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-6" staggerDelay={0.07}>
+        {filteredServices.map((srv) => {
+          const photoCount = (srv.galleryImages?.length || 0) + 1;
+          const videoCount = srv.videos?.length || 0;
 
-                {srv.b2bAvailable && (
-                  <div className="absolute top-3 right-3 bg-white text-[#0F1F38] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md">
-                    B2B Lending Ready
-                  </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="p-6 space-y-4">
+          return (
+            <StaggerItem key={srv.id}>
+              <div
+                className={`bg-gradient-to-b from-[#0B1322] to-[#060B14] border border-amber-500/20 hover:border-amber-400/60 rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 shadow-lg sm:shadow-xl flex flex-col justify-between group h-full hover:-translate-y-1`}
+              >
                 <div>
-                  <h3 className="text-xl font-bold text-white group-hover:text-blue-200 transition-colors">
-                    {srv.title}
-                  </h3>
-                  <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-                    {srv.shortDesc}
-                  </p>
-                </div>
+                  {/* Media header - compact on mobile */}
+                  <div className="relative h-28 sm:h-52 overflow-hidden bg-[#060B14]">
+                    <img
+                      src={srv.image}
+                      alt={srv.title}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1322] via-black/20 to-transparent" />
 
-                {/* Features List */}
-                <div className="space-y-2 pt-2 border-t border-white/10">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                    Key Specifications & Inclusions:
-                  </span>
-                  {srv.features.map((feat, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-xs">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0 mt-0.5" />
-                      <span className="text-slate-200">{feat}</span>
+                    {/* Media badges */}
+                    <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-1.5">
+                      <span className="bg-[#050811]/90 text-amber-300 text-[8px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded sm:rounded-md border border-amber-400/30 flex items-center gap-0.5 sm:gap-1 backdrop-blur-sm">
+                        <ImageIcon className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
+                        <span>{photoCount}</span>
+                      </span>
+                      {videoCount > 0 && (
+                        <span className="bg-amber-500/90 text-slate-950 text-[8px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded sm:rounded-md border border-amber-400 flex items-center gap-0.5 sm:gap-1 shadow-sm">
+                          <Video className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
+                          <span>{videoCount}</span>
+                        </span>
+                      )}
                     </div>
-                  ))}
+
+                    {srv.b2bAvailable && (
+                      <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded sm:rounded-md uppercase tracking-wider shadow-sm">
+                        B2B
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-2.5 sm:p-5 space-y-1.5 sm:space-y-3">
+                    <div>
+                      <h3 className="text-xs sm:text-base font-bold text-white group-hover:text-amber-300 transition-colors line-clamp-1 sm:line-clamp-2 leading-snug">
+                        {srv.title}
+                      </h3>
+                      <p className="text-[10px] sm:text-xs text-slate-300 mt-0.5 sm:mt-1 line-clamp-1 sm:line-clamp-2">
+                        {srv.shortDesc}
+                      </p>
+                    </div>
+
+                    {/* Features List - hidden on ultra-small mobile, shown on sm+ for clean Jumia card look */}
+                    <div className="hidden sm:block space-y-1.5 pt-2 border-t border-white/10">
+                      {srv.features.slice(0, 3).map((feat, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-xs">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <span className="text-slate-200">{feat}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Actions - compact on mobile */}
+                <div className="p-2.5 sm:p-5 pt-0 flex items-center gap-1.5 sm:gap-2">
+                  <button
+                    onClick={() => openBookingModal({ serviceId: srv.id })}
+                    className="flex-1 py-1.5 px-2 sm:py-2.5 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer truncate"
+                  >
+                    <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span>Book</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveServiceModal(srv);
+                      setActiveMediaTab('photos');
+                    }}
+                    className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl border border-white/15 bg-white/5 hover:bg-amber-400/20 hover:text-amber-200 text-slate-300 transition-colors cursor-pointer shrink-0"
+                    title="View Photos & Videos"
+                  >
+                    <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
                 </div>
               </div>
-            </div>
+            </StaggerItem>
+          );
+        })}
+      </StaggerContainer>
 
-            {/* Bottom Actions */}
-            <div className="p-6 pt-0 flex items-center gap-3">
-              <button
-                onClick={() => openBookingModal({ serviceId: srv.id })}
-                className="flex-1 py-3 px-4 rounded-xl bg-white hover:bg-slate-100 text-[#0F1F38] font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all"
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Reserve / Book</span>
-              </button>
+      </ScrollReveal>
 
-              <button
-                onClick={() => setActiveServiceModal(srv)}
-                className="p-3 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 text-white transition-colors"
-                title="Detailed Technical Specifications"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* INTERACTIVE INSTANT EVENT COST ESTIMATOR */}
-      <section className="rounded-3xl p-6 sm:p-10 border border-white/20 bg-[#132644] text-white shadow-2xl space-y-8">
-        <div className="max-w-2xl space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white border border-white/20 text-xs font-bold">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-300" />
-            <span>Interactive Cost Calculator</span>
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-['Outfit']">
-            Build Your Custom Package & Get Instant Estimate
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-300">
-            Select items to simulate package combinations. Our team will tailor exact rigging blueprints.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Controls */}
-          <div className="lg:col-span-7 space-y-6">
-            
-            {/* Scale sliders */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#0E1D35] p-5 rounded-2xl border border-white/10">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span>Guest Capacity Scale:</span>
-                  <span className="text-white bg-white/10 px-2 py-0.5 rounded-md font-mono">{estGuests} Guests</span>
-                </div>
-                <input
-                  type="range"
-                  min="50"
-                  max="2500"
-                  step="50"
-                  value={estGuests}
-                  onChange={(e) => setEstGuests(Number(e.target.value))}
-                  className="w-full accent-white"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span>Event Duration (Days):</span>
-                  <span className="text-white bg-white/10 px-2 py-0.5 rounded-md font-mono">{estDays} Day(s)</span>
-                </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="7"
-                  step="1"
-                  value={estDays}
-                  onChange={(e) => setEstDays(Number(e.target.value))}
-                  className="w-full accent-white"
-                />
-              </div>
-            </div>
-
-            {/* Service Checkboxes */}
-            <div className="space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                1. Select Core Service Modules:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {services.map((s) => {
-                  const isChecked = selectedServiceIds.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => toggleEstimatorService(s.id)}
-                      className={`p-3 rounded-xl border text-left text-xs font-semibold flex items-center justify-between transition-all ${
-                        isChecked
-                          ? 'bg-white text-[#0F1F38] border-white font-bold shadow-md'
-                          : 'bg-[#0E1D35] text-slate-300 border-white/15 hover:border-white/30'
-                      }`}
-                    >
-                      <span className="truncate pr-2">{s.title}</span>
-                      <span className="shrink-0 text-[11px] font-mono opacity-80">+${s.basePrice}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Addons Checkboxes */}
-            <div className="space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                2. Power & Logistics Add-ons:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {[
-                  { key: 'generator', label: '100kVA Diesel Gen', price: 350 },
-                  { key: 'toilet', label: 'VIP Restroom Trailer', price: 350 },
-                  { key: 'mc', label: 'Bilingual MC Host', price: 400 },
-                  { key: 'led', label: 'P2.6 LED Wall (4x3m)', price: 800 },
-                  { key: 'dryice', label: 'Dry Ice Low Fog Effect', price: 150 },
-                ].map((addon) => {
-                  const isChecked = selectedAddonKeys[addon.key];
-                  return (
-                    <button
-                      key={addon.key}
-                      type="button"
-                      onClick={() => toggleEstimatorAddon(addon.key)}
-                      className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between ${
-                        isChecked
-                          ? 'bg-white text-[#0F1F38] border-white font-bold shadow-xs'
-                          : 'bg-[#0E1D35] text-slate-300 border-white/15'
-                      }`}
-                    >
-                      <span className="text-[11px]">{addon.label}</span>
-                      <span className="text-[10px] opacity-70">+${addon.price}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-          </div>
-
-          {/* Right Estimate Summary Box */}
-          <div className="lg:col-span-5 bg-[#0E1D35] rounded-3xl p-6 sm:p-7 border border-white/20 space-y-6">
-            <div className="space-y-1">
-              <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Estimated Package Total:</span>
-              <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">
-                ${grandTotalEstimate.toLocaleString()}
-              </div>
-              <p className="text-[11px] text-slate-300">
-                Includes staging crew, sound technician & generator dispatch.
-              </p>
-            </div>
-
-            <div className="space-y-2 border-t border-b border-white/10 py-4 text-xs">
-              <div className="flex justify-between text-slate-300">
-                <span>Selected Services ({selectedServiceIds.length}):</span>
-                <span className="font-mono text-white">${Math.round(baseCost * guestScale * estDays).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span>Addons & Generators:</span>
-                <span className="font-mono text-white">${addonsTotal * estDays}</span>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span>Capacity Factor:</span>
-                <span className="font-mono text-white">{estGuests} Guests ({guestScale}x)</span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => openBookingModal({
-                packageType: `Custom Calculator Estimate ($${grandTotalEstimate.toLocaleString()} - ${estGuests} Guests)`,
-              })}
-              className="w-full py-3.5 px-6 rounded-xl bg-white hover:bg-slate-100 text-[#0F1F38] font-extrabold text-sm shadow-xl transition-all flex items-center justify-center gap-2"
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Lock In This Package Estimate</span>
-            </button>
-          </div>
-
-        </div>
-      </section>
-
-      {/* DETAILED SERVICE MODAL */}
+      {/* DETAILED SERVICE MODAL WITH MEDIA (PHOTOS & VIDEOS) */}
       <AnimatePresence>
         {activeServiceModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
@@ -371,58 +236,147 @@ export const ServicesView: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="max-w-2xl w-full rounded-3xl overflow-hidden border border-white/20 bg-[#132644] text-white shadow-2xl my-8 space-y-0"
+              className="max-w-2xl w-full rounded-3xl overflow-hidden border border-amber-500/30 bg-[#0B1322] text-white shadow-2xl my-8"
             >
-              <div className="relative h-64 w-full">
+              {/* Header Image */}
+              <div className="relative h-60 w-full bg-[#060B14]">
                 <img
                   src={activeServiceModal.image}
                   alt={activeServiceModal.title}
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
                 <button
                   onClick={() => setActiveServiceModal(null)}
-                  className="absolute top-4 right-4 p-2 rounded-full bg-[#0F1F38]/80 text-white hover:bg-[#0F1F38] border border-white/20"
+                  className="absolute top-3 right-3 p-1.5 rounded-full bg-[#050811]/80 text-white hover:bg-amber-500 hover:text-slate-950 border border-white/20 transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-6 sm:p-8 space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white">{activeServiceModal.title}</h2>
-                  <p className="text-xs text-blue-300 font-bold uppercase mt-0.5">
-                    Pricing starts at ${activeServiceModal.basePrice} {activeServiceModal.priceUnit}
-                  </p>
+              {/* Modal Body */}
+              <div className="p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{activeServiceModal.title}</h2>
+                    <p className="text-xs text-amber-300/80">{activeServiceModal.tagline}</p>
+                  </div>
+
+                  {/* Media Tabs */}
+                  <div className="flex items-center gap-1 bg-[#060B14] p-1 rounded-xl border border-white/10 self-start sm:self-auto">
+                    <button
+                      onClick={() => setActiveMediaTab('photos')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                        activeMediaTab === 'photos'
+                          ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <ImageIcon className="w-3 h-3" />
+                      <span>Photos</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveMediaTab('videos')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                        activeMediaTab === 'videos'
+                          ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <Video className="w-3 h-3" />
+                      <span>Videos ({(activeServiceModal.videos || []).length})</span>
+                    </button>
+                  </div>
                 </div>
 
-                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
-                  {activeServiceModal.description}
-                </p>
+                {/* Media Tab 1: Photos */}
+                {activeMediaTab === 'photos' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-200 leading-relaxed">
+                      {activeServiceModal.fullDesc || activeServiceModal.shortDesc}
+                    </p>
 
-                <div className="space-y-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider block">
-                    Full Inclusions & Rigging Parameters:
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Gallery Thumbnails */}
+                    {activeServiceModal.galleryImages && activeServiceModal.galleryImages.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[11px] font-bold text-amber-300 uppercase">Gallery Photos</span>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                          {[activeServiceModal.image, ...activeServiceModal.galleryImages.filter(img => img !== activeServiceModal.image)].map((imgUrl, idx) => (
+                            <img
+                              key={idx}
+                              src={imgUrl}
+                              alt="Service photo"
+                              referrerPolicy="no-referrer"
+                              className="w-full h-16 rounded-lg object-cover border border-white/15"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Media Tab 2: Videos */}
+                {activeMediaTab === 'videos' && (
+                  <div className="space-y-3">
+                    {(!activeServiceModal.videos || activeServiceModal.videos.length === 0) ? (
+                      <div className="p-6 rounded-xl bg-[#060B14] text-center text-xs text-slate-400 space-y-1">
+                        <Video className="w-6 h-6 mx-auto opacity-50" />
+                        <p>No video links uploaded yet.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {activeServiceModal.videos.map((vid) => (
+                          <a
+                            key={vid.id}
+                            href={vid.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-[#060B14] p-3 rounded-xl border border-white/15 hover:border-amber-400/40 flex items-center justify-between gap-2 group transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0">
+                                <Play className="w-3.5 h-3.5 fill-amber-300" />
+                              </div>
+                              <div className="truncate">
+                                <p className="text-xs font-bold text-white truncate">{vid.title}</p>
+                                <span className="text-[10px] text-amber-300 uppercase font-mono">
+                                  {vid.platform || 'Watch Video'}
+                                </span>
+                              </div>
+                            </div>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-300 shrink-0" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Features */}
+                <div className="space-y-1.5 pt-2 border-t border-white/10">
+                  <span className="text-[11px] font-bold text-amber-300 uppercase block">Specifications:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
                     {activeServiceModal.features.map((feat, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-xs bg-white/10 p-2.5 rounded-xl border border-white/15">
-                        <Check className="w-3.5 h-3.5 text-white shrink-0 mt-0.5" />
-                        <span className="text-slate-100">{feat}</span>
+                      <div key={idx} className="flex items-start gap-2 bg-white/5 p-2 rounded-lg">
+                        <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="text-slate-200">{feat}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-white/15 flex items-center justify-between gap-3">
+                {/* Action */}
+                <div className="pt-2">
                   <button
                     onClick={() => {
                       const srvId = activeServiceModal.id;
                       setActiveServiceModal(null);
                       openBookingModal({ serviceId: srvId });
                     }}
-                    className="w-full py-3 rounded-xl bg-white hover:bg-slate-100 text-[#0F1F38] font-extrabold text-sm shadow-md text-center"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 text-center transition-all cursor-pointer"
                   >
-                    Proceed with Booking
+                    Reserve This Service
                   </button>
                 </div>
               </div>

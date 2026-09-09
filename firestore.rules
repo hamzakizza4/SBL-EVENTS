@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper validation functions
+    function isValidString(str, minLen, maxLen) {
+      return str is string && str.size() >= minLen && str.size() <= maxLen;
+    }
+
+    // Public Collections: Public Read Access
+    match /services/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /gallery_items/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /event_categories/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /testimonials/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /inventory/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /calendar_events/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /site_settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /activity_logs/{docId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true;
+    }
+
+    // Client Inquiries & Bookings with Input Validation
+    match /bookings/{bookingId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['clientName', 'clientPhone', 'eventType'])
+                    && isValidString(request.resource.data.clientName, 2, 120)
+                    && isValidString(request.resource.data.clientPhone, 5, 40);
+      allow update, delete: if true;
+    }
+
+    match /callback_requests/{requestId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['clientName', 'clientPhone'])
+                    && isValidString(request.resource.data.clientName, 2, 120)
+                    && isValidString(request.resource.data.clientPhone, 5, 40);
+      allow update, delete: if true;
+    }
+
+    // Fallback: Deny any unspecified subpaths
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

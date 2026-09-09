@@ -50,12 +50,33 @@ export const ToastContainer: React.FC = () => {
           >
             {getIcon(toast.type)}
             <div className="flex-1 min-w-0">
-              <h5 className="font-bold text-xs sm:text-sm text-white leading-tight">
-                {toast.title}
-              </h5>
-              <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h5 className="font-bold text-xs sm:text-sm text-white leading-tight">
+                  {toast.title}
+                </h5>
+                {toast.referenceNumber && (
+                  <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    #{toast.referenceNumber}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
                 {toast.message}
               </p>
+              {toast.actionLabel && toast.onAction && (
+                <div className="mt-2.5">
+                  <button
+                    onClick={() => {
+                      if (toast.onAction) toast.onAction();
+                      removeToast(toast.id);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs border border-white/20 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                  >
+                    <span>{toast.actionLabel}</span>
+                    <span className="text-[10px]">&rarr;</span>
+                  </button>
+                </div>
+              )}
             </div>
             <button
               onClick={() => removeToast(toast.id)}

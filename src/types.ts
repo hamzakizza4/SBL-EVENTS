@@ -1,15 +1,46 @@
-export type Page = 'home' | 'services' | 'gallery' | 'about' | 'calendar' | 'testimonials' | 'contact' | 'admin';
+export type Page = 'home' | 'services' | 'gallery' | 'about' | 'calendar' | 'testimonials' | 'contact' | 'admin' | 'stage-planner';
 
-export type ThemeMode = 'medium-dark-blue' | 'deep-navy-blue' | 'slate-dark-blue' | 'light-luxury';
+export interface BookingPrefill {
+  serviceId?: string;
+  date?: string;
+  packageType?: string;
+  selectedServices?: string[];
+  guestCount?: number;
+  eventType?: EventType;
+  durationDays?: number;
+  location?: string;
+  estimatedTotal?: number;
+  addons?: BookingAddon[];
+  customRequests?: string;
+}
+
+export type ThemeMode = 
+  | 'white-brown'
+  | 'white-brown-light'
+  | 'royal-emerald-gold' 
+  | 'crimson-obsidian' 
+  | 'amethyst-rosegold' 
+  | 'medium-dark-blue' 
+  | 'deep-navy-blue' 
+  | 'slate-dark-blue' 
+  | 'light-luxury';
 
 export type ServiceCategory = 'production' | 'tents' | 'lighting' | 'sound-mc' | 'screens' | 'restrooms' | 'b2b-lending';
 
 export interface ServicePackage {
   name: string;
-  price: number;
+  price?: number;
   popular?: boolean;
   description: string;
   features: string[];
+}
+
+export interface ServiceVideo {
+  id: string;
+  title: string;
+  url: string;
+  thumbnail?: string;
+  platform?: 'tiktok' | 'youtube' | 'mp4' | 'other';
 }
 
 export interface Service {
@@ -21,8 +52,9 @@ export interface Service {
   fullDesc: string;
   image: string;
   galleryImages: string[];
-  basePrice: number;
-  priceUnit: string;
+  videos?: ServiceVideo[];
+  basePrice?: number;
+  priceUnit?: string;
   features: string[];
   specs: { label: string; value: string }[];
   capacityOrScale?: string;
@@ -38,14 +70,41 @@ export type EventType =
   | 'outdoor_expo' 
   | 'cultural_religious' 
   | 'tent_lending_b2b'
-  | 'other';
+  | 'other'
+  | (string & {});
+
+export interface EventCategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  iconName: string;
+  badge?: string;
+  color: 'rose' | 'blue' | 'amber' | 'emerald' | 'purple' | 'indigo' | 'cyan' | 'slate';
+  targetScale?: string;
+  defaultPackageEstimate?: number;
+  recommendedServices: string[];
+  rentalChecklist?: string[];
+  active: boolean;
+  order: number;
+  createdAt?: string;
+}
+
+export interface SiteAnnouncement {
+  enabled: boolean;
+  badge: string;
+  message: string;
+  actionText?: string;
+  actionType?: 'booking' | 'whatsapp' | 'phone' | 'calendar' | 'gallery';
+  urgent?: boolean;
+}
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
 
 export interface BookingAddon {
   id: string;
   name: string;
-  price: number;
+  price?: number;
   quantity: number;
 }
 
@@ -64,16 +123,69 @@ export interface Booking {
   venueType: 'outdoor_grass' | 'outdoor_concrete' | 'indoor_hall' | 'beach' | 'private_compound';
   guestCount: number;
   selectedServices: string[]; // Service IDs
-  addons: BookingAddon[];
+  addons?: BookingAddon[];
   customRequests: string;
   powerRequirement?: 'generator_needed' | 'venue_power_available' | 'unsure';
   tentSizeNeeded?: string;
   lightingStyle?: string;
-  estimatedTotal: number;
+  estimatedTotal?: number;
+  paymentStatus?: 'unpaid' | 'deposit_paid' | 'fully_paid' | 'overdue';
+  amountPaid?: number;
+  balanceDue?: number;
+  paymentDueDate?: string;
+  lastReminderSentAt?: string;
   status: BookingStatus;
   createdAt: string;
   notes?: string;
   assignedStaffId?: string;
+  isQuickBooking?: boolean;
+}
+
+export type AdminAlertCategory = 'booking' | 'callback' | 'review' | 'settings' | 'login' | 'system';
+
+export interface AdminLiveAlert {
+  id: string;
+  category: AdminAlertCategory;
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  priority?: 'normal' | 'high' | 'urgent';
+  booking?: Booking;
+  callback?: CallbackRequest;
+  testimonial?: Testimonial;
+  actionType?: 'review_booking' | 'confirm_booking' | 'view_callbacks' | 'call_client' | 'view_reviews' | 'approve_review' | 'view_logs' | 'dismiss';
+  metadata?: Record<string, any>;
+  source?: 'quick_booking' | 'firestore_live' | 'manual' | 'client_action';
+}
+
+export type AdminBookingAlert = AdminLiveAlert;
+
+export type ActivityLogCategory = 'booking_change' | 'user_login' | 'settings_update' | 'inventory_change' | 'service_change' | 'system';
+
+export interface ActivityLog {
+  id: string;
+  category: ActivityLogCategory;
+  action: string;
+  title: string;
+  description: string;
+  performedBy: {
+    userId?: string;
+    name: string;
+    role?: string;
+    isSystem?: boolean;
+  };
+  metadata?: {
+    bookingId?: string;
+    referenceNumber?: string;
+    clientName?: string;
+    oldValue?: string | number | boolean;
+    newValue?: string | number | boolean;
+    ipOrLocation?: string;
+    [key: string]: any;
+  };
+  timestamp: string;
+  createdAt: string;
 }
 
 export interface CalendarEvent {
@@ -89,6 +201,7 @@ export interface CalendarEvent {
   guestCount?: number;
   isPublic?: boolean;
   publicDescription?: string;
+  relatedBookingId?: string;
 }
 
 export interface Testimonial {
@@ -99,25 +212,64 @@ export interface Testimonial {
   content: string;
   rating: number; // 1-5
   date: string;
-  image: string;
+  image?: string;
+  avatarIcon?: string;
+  avatarBg?: string;
   eventType: EventType;
   verified: boolean;
   approved: boolean;
   featured?: boolean;
 }
 
+export interface CallbackRequest {
+  id: string;
+  clientName: string;
+  phone: string;
+  eventInterest?: string;
+  preferredTime?: string;
+  notes?: string;
+  status: 'pending' | 'called' | 'converted' | 'dismissed';
+  createdAt: string;
+}
+
+export interface VideoReel {
+  id: string;
+  title: string;
+  description: string;
+  category: 'megatent' | 'weddings' | 'screens' | 'lighting' | 'sound';
+  tiktokHandle: string;
+  tiktokUrl: string;
+  hotline: string;
+  thumbnail: string;
+  badge: string;
+  duration: string;
+  viewsCount?: string;
+  location: string;
+  equipmentHighlights: string[];
+  audioTranscriptNotes?: string;
+  ugxEstimate?: number;
+}
+
 export interface GalleryItem {
   id: string;
   title: string;
-  category: ServiceCategory | 'all' | 'weddings' | 'corporate' | 'concerts';
+  clientName?: string;
+  category: string;
   image: string;
   location: string;
   date: string;
-  attendees: string;
+  attendees?: string;
   description: string;
   servicesProvided: string[];
-  beforeImage?: string;
-  afterImage?: string;
+  isFeaturedRealSetup?: boolean;
+  tiktokHandle?: string;
+  tiktokUrl?: string;
+  videoUrl?: string;
+  galleryImages?: string[];
+  photos?: string[];
+  badge?: string;
+  postedBy?: string;
+  createdAt?: string;
 }
 
 export interface InventoryItem {
@@ -147,6 +299,9 @@ export interface ToastMessage {
   title: string;
   message: string;
   type: 'success' | 'info' | 'warning' | 'error';
+  referenceNumber?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 // User & Sub-Admin / Employee Types

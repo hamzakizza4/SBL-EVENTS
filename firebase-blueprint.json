@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "calendarEvents": {
+      "title": "Calendar Events",
+      "description": "Live schedule events and bookings visible to all users with real-time sync",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "eventType": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "location": { "type": "string" },
+        "status": { "type": "string" },
+        "servicesSummary": { "type": "array" },
+        "clientName": { "type": "string" },
+        "guestCount": { "type": "number" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "eventType", "startDate", "endDate"]
+    },
+    "bookings": {
+      "title": "Client Bookings",
+      "description": "Bookings submitted by clients or managed by admins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceNumber": { "type": "string" },
+        "clientName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "eventType": { "type": "string" },
+        "eventDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "location": { "type": "string" },
+        "guestCount": { "type": "number" },
+        "selectedServices": { "type": "array" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["referenceNumber", "clientName", "phone", "eventType", "eventDate"]
+    },
+    "services": {
+      "title": "Services Catalog",
+      "description": "Services and rental inventory categories managed by admin with live sync",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "shortDescription": { "type": "string" },
+        "category": { "type": "string" }
+      }
+    },
+    "galleryItems": {
+      "title": "Showcase Gallery",
+      "description": "Completed events and media showcases",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      }
+    },
+    "siteSettings": {
+      "title": "Site Settings",
+      "description": "Global settings like buffers, announcement, and metadata",
+      "type": "object",
+      "properties": {
+        "bufferDaysBefore": { "type": "number" },
+        "bufferDaysAfter": { "type": "number" },
+        "announcement": { "type": "object" }
+      }
+    },
+    "callbackRequests": {
+      "title": "Callback Requests",
+      "description": "Customer urgent callback requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "testimonials": {
+      "title": "Testimonials",
+      "description": "Customer feedback and reviews",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "review": { "type": "string" },
+        "approved": { "type": "boolean" }
+      }
+    },
+    "inventory": {
+      "title": "Inventory Items",
+      "description": "Equipment warehouse stock levels",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "availableQuantity": { "type": "number" },
+        "totalQuantity": { "type": "number" }
+      }
+    },
+    "activityLogs": {
+      "title": "Activity Logs",
+      "description": "Live audit logs of booking changes, user logins, and settings updates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "action": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "performedBy": { "type": "object" },
+        "metadata": { "type": "object" },
+        "timestamp": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["category", "action", "title", "timestamp"]
+    }
+  }
+}

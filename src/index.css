@@ -3,24 +3,35 @@
 @layer base {
   :root {
     --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-display: 'Playfair Display', Georgia, serif;
+    --font-display: 'Syne', 'Outfit', sans-serif;
+    --font-serif: 'Playfair Display', Georgia, serif;
     --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
   }
 
   body {
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #0F1F38;
+    background-color: #060E1E;
     color: #FFFFFF;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  .font-syne {
+    font-family: var(--font-display);
   }
 
   .font-serif-display {
-    font-family: var(--font-display);
+    font-family: var(--font-serif);
+  }
+
+  .font-mono-code {
+    font-family: var(--font-mono);
   }
 }
 
@@ -42,3 +53,20 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4);
 }
+
+@keyframes shimmerSweep {
+  0% {
+    transform: translateX(-150%);
+  }
+  50% {
+    transform: translateX(50%);
+  }
+  100% {
+    transform: translateX(150%);
+  }
+}
+
+.animate-shimmer-sweep {
+  animation: shimmerSweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+

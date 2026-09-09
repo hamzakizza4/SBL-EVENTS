@@ -1,13 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { COMPANY_CONTACT_INFO, AVAILABLE_ADDONS } from '../data/mockData';
-import { EventType, BookingAddon } from '../types';
+import { 
+  COMPANY_CONTACT_INFO, 
+  sblBusinessCardImg, 
+  bookingBannerBgImg,
+  weddingVipGlassLoungeImg,
+  sblMegaTentImg,
+  sblHallStageStockImg
+} from '../data/mockData';
+import { EventType } from '../types';
 import { getThemeClasses } from '../utils/themeStyles';
+import { CelebrationSuccessModal } from './CelebrationSuccessModal';
+import { GeometricHeroBanner } from './GeometricHeroBanner';
+import { ScrollReveal, StaggerContainer, StaggerItem } from './ScrollReveal';
+import { 
+  validateBookingDate, 
+  getTodayDateString, 
+  DateValidationResult 
+} from '../utils/bookingDateUtils';
+import { 
+  sanitizeInput, 
+  sanitizeEmail, 
+  sanitizePhone, 
+  checkContactRateLimit, 
+  recordContactSubmission, 
+  isDuplicatePayload,
+  isHoneypotTriggered,
+  checkBookingRateLimit
+} from '../utils/security';
 import { 
   Phone, 
   Mail, 
   MapPin, 
-  Clock, 
   MessageCircle, 
   Calendar, 
   ShieldCheck, 
@@ -16,17 +40,38 @@ import {
   HelpCircle, 
   ChevronDown, 
   ChevronUp, 
-  Check
+  Check,
+  Sparkles,
+  AlertTriangle,
+  CalendarX,
+  Clock,
+  ArrowRight,
+  Zap,
+  Users,
+  Layers,
+  Sparkle
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const ContactBookingView: React.FC = () => {
-  const { services, addBooking, showToast, theme } = useApp();
+  const { 
+    services, 
+    addBooking, 
+    showToast, 
+    theme, 
+    setCurrentPage,
+    bookings,
+    calendarEvents,
+    eventCategories,
+    bufferDaysBefore,
+    bufferDaysAfter
+  } = useApp();
   const t = getThemeClasses(theme);
 
   const [activeTab, setActiveTab] = useState<'booking' | 'inquiry'>('booking');
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Full Booking Engine State
+  // Booking Form State
   const [clientName, setClientName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -42,12 +87,23 @@ export const ContactBookingView: React.FC = () => {
     'intelligent-lighting',
     'mobile-disco-sound',
   ]);
-  const [addons, setAddons] = useState<BookingAddon[]>([
-    { id: 'gen-100', name: '100kVA Silent Diesel Generator', price: 350, quantity: 1 }
-  ]);
-  const [customRequests, setCustomRequests] = useState('');
   const [powerRequirement, setPowerRequirement] = useState<'generator_needed' | 'venue_power_available' | 'unsure'>('generator_needed');
+  const [customRequests, setCustomRequests] = useState('');
+  
+  // Success & Celebration Modal State
   const [isSuccess, setIsSuccess] = useState<string | null>(null);
+  const [celebrationData, setCelebrationData] = useState<{
+    referenceNumber: string;
+    clientName: string;
+    phone: string;
+    eventType: string;
+    eventDate: string;
+    location: string;
+    durationDays?: number;
+    guestCount?: number;
+    selectedServices?: string[];
+  } | null>(null);
+  const [isCelebrationOpen, setIsCelebrationOpen] = useState(false);
 
   // Simple Inquiry Form State
   const [inquiryName, setInquiryName] = useState('');
@@ -55,16 +111,24 @@ export const ContactBookingView: React.FC = () => {
   const [inquiryEmail, setInquiryEmail] = useState('');
   const [inquirySubject, setInquirySubject] = useState('General Equipment Rental');
   const [inquiryMessage, setInquiryMessage] = useState('');
+  const [inquirySent, setInquirySent] = useState(false);
+  const [inquiryHoneypot, setInquiryHoneypot] = useState('');
+  const [bookingHoneypot, setBookingHoneypot] = useState('');
 
-  // Calculations
-  const servicesTotal = selectedServices.reduce((sum, sId) => {
-    const s = services.find((srv) => srv.id === sId);
-    return sum + (s ? s.basePrice : 0);
-  }, 0) * durationDays;
+  const todayDate = useMemo(() => getTodayDateString(), []);
 
-  const addonsTotal = addons.reduce((sum, a) => sum + a.price * a.quantity, 0) * durationDays;
-  const guestScale = guestCount > 500 ? 1.3 : guestCount > 1000 ? 1.6 : 1.0;
-  const estimatedTotal = Math.round((servicesTotal * guestScale) + addonsTotal);
+  // Real-time Date Validation for past dates and calendar unavailabilities
+  const dateValidation: DateValidationResult | null = useMemo(() => {
+    if (!eventDate) return null;
+    return validateBookingDate(
+      eventDate,
+      durationDays,
+      bookings,
+      calendarEvents,
+      bufferDaysBefore,
+      bufferDaysAfter
+    );
+  }, [eventDate, durationDays, bookings, calendarEvents, bufferDaysBefore, bufferDaysAfter]);
 
   const toggleService = (sId: string) => {
     setSelectedServices((prev) =>
@@ -72,54 +136,128 @@ export const ContactBookingView: React.FC = () => {
     );
   };
 
-  const toggleAddon = (addonId: string, name: string, price: number) => {
-    setAddons((prev) => {
-      const exists = prev.find((a) => a.id === addonId);
-      if (exists) {
-        return prev.filter((a) => a.id !== addonId);
-      } else {
-        return [...prev, { id: addonId, name, price, quantity: 1 }];
-      }
-    });
-  };
-
   const handleBookingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientName || !phone || !eventDate || selectedServices.length === 0) {
-      showToast('Missing Fields', 'Please complete the required contact and event details.', 'warning');
+
+    // 0. Anti-bot honeypot check
+    if (isHoneypotTriggered(bookingHoneypot)) {
       return;
     }
 
+    // 1. Rate limit pre-check
+    const rateCheck = checkBookingRateLimit(false);
+    if (!rateCheck.allowed) {
+      showToast('Rate Limit Active', rateCheck.message || `Please wait ${rateCheck.remainingSeconds}s before booking.`, 'warning');
+      return;
+    }
+
+    if (!clientName || !phone || !eventDate || selectedServices.length === 0) {
+      showToast('Missing Fields', 'Please complete required contact details, event date, and services.', 'warning');
+      return;
+    }
+
+    // Enforce real-time date validation
+    if (dateValidation && !dateValidation.isValid) {
+      if (dateValidation.status === 'past') {
+        showToast('Invalid Date', 'Past dates cannot be selected. Please pick an upcoming date.', 'error');
+        return;
+      }
+      if (dateValidation.status === 'unavailable' || dateValidation.status === 'buffer') {
+        showToast('Date Unavailable', dateValidation.message, 'error');
+        return;
+      }
+    }
+
+    const sanitizedName = sanitizeInput(clientName);
+    const sanitizedPhone = sanitizePhone(phone);
+    const sanitizedEmail = sanitizeEmail(email);
+    const sanitizedCompany = sanitizeInput(companyName);
+    const sanitizedLocation = sanitizeInput(location);
+    const sanitizedRequests = sanitizeInput(customRequests);
+
     const newBooking = addBooking({
-      clientName,
-      email: email || `${clientName.toLowerCase().replace(/\s+/g, '')}@client.com`,
-      phone,
-      companyName,
+      clientName: sanitizedName,
+      email: sanitizedEmail || `${sanitizedName.toLowerCase().replace(/[^a-z0-9]/g, '')}@client.com`,
+      phone: sanitizedPhone,
+      companyName: sanitizedCompany,
       eventType,
       eventDate,
       durationDays,
-      location: location || 'Kampala Region / Client Grounds',
+      location: sanitizedLocation || 'Lwengo / Masaka / Kampala / Uganda',
       venueType,
       guestCount,
       selectedServices,
-      addons,
-      customRequests,
+      addons: [],
+      customRequests: sanitizedRequests,
       powerRequirement,
-      estimatedTotal,
     });
 
-    setIsSuccess(newBooking.referenceNumber);
-    window.scrollTo({ top: 300, behavior: 'smooth' });
+    if (newBooking) {
+      setIsSuccess(newBooking.referenceNumber);
+      setCelebrationData({
+        referenceNumber: newBooking.referenceNumber,
+        clientName: newBooking.clientName,
+        phone: newBooking.phone,
+        eventType: newBooking.eventType,
+        eventDate: newBooking.eventDate,
+        location: newBooking.location,
+        durationDays: newBooking.durationDays,
+        guestCount: newBooking.guestCount,
+        selectedServices: newBooking.selectedServices,
+      });
+      setIsCelebrationOpen(true);
+    }
   };
 
   const handleInquirySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inquiryName || !inquiryPhone || !inquiryMessage) return;
-    showToast(
-      'Inquiry Sent Successfully!',
-      `Thank you ${inquiryName}. Our desk officer will respond within 30 minutes.`,
-      'success'
-    );
+
+    // 0. Anti-bot honeypot check
+    if (isHoneypotTriggered(inquiryHoneypot)) {
+      setInquirySent(true);
+      return;
+    }
+
+    // 1. Rate limiting check (max 3 inquiries per 120s)
+    const rateCheck = checkContactRateLimit(false);
+    if (!rateCheck.allowed) {
+      showToast('Rate Limit Active', rateCheck.message || `Please wait ${rateCheck.remainingSeconds}s before submitting.`, 'warning');
+      return;
+    }
+
+    if (!inquiryName || !inquiryPhone || !inquiryMessage) {
+      showToast('Missing Fields', 'Please provide your name, phone number, and message.', 'warning');
+      return;
+    }
+    
+    const sanitizedInqName = sanitizeInput(inquiryName);
+    const sanitizedInqPhone = sanitizePhone(inquiryPhone);
+    const sanitizedInqMsg = sanitizeInput(inquiryMessage);
+
+    // 2. Duplicate submission prevention
+    const sig = `${sanitizedInqName}_${sanitizedInqPhone}_${sanitizedInqMsg}`;
+    if (isDuplicatePayload('inquiry', sig, 30)) {
+      showToast('Inquiry Received', 'Your inquiry was already submitted a moment ago. Our dispatch team is reviewing it!', 'info');
+      return;
+    }
+
+    // Record submission to decrement rate limit bucket
+    recordContactSubmission();
+
+    const inquiryRef = `INQ-${Math.floor(1000 + Math.random() * 9000)}`;
+    setCelebrationData({
+      referenceNumber: inquiryRef,
+      clientName: sanitizedInqName,
+      phone: sanitizedInqPhone,
+      eventType: inquirySubject,
+      eventDate: 'Flexible / In Discussion',
+      location: 'Uganda Area',
+      guestCount: 200,
+      selectedServices: ['Equipment Consultation', 'Custom Setup'],
+    });
+    setIsCelebrationOpen(true);
+    setInquirySent(true);
+    
     setInquiryName('');
     setInquiryPhone('');
     setInquiryEmail('');
@@ -128,247 +266,412 @@ export const ContactBookingView: React.FC = () => {
 
   const faqs = [
     {
-      q: 'How far in advance should we reserve mega marquees, sound and lighting?',
-      a: 'For major wedding weekends and holiday concert dates, we recommend booking 1 to 4 months in advance. However, our large fleet of 25,000+ m² tents allows us to accommodate emergency requests or equipment lending on short notice.'
+      q: 'How far in advance should we reserve tents, sound, and lighting?',
+      a: 'We recommend booking 2 to 4 weeks ahead. Short-notice requests are accommodated based on fleet availability.'
     },
     {
-      q: 'Do you offer B2B tent lending and sub-rentals to other event organizers?',
-      a: 'Yes! We actively partner with event planners, decorators, hotels, and venues. You can hire tents (dry-hire or wet-hire with our rigging crew), box truss staging, line arrays, and mobile luxury toilet trailers at discounted wholesale rates.'
+      q: 'Do you offer B2B equipment lending to event planners?',
+      a: 'Yes. We supply tents, heavy box trusses, line-array audio, and mobile restrooms at partner wholesale rates.'
     },
     {
-      q: 'How do you handle rainy weather and high winds during outdoor events?',
-      a: 'All SBL structures are European-engineered with wind load certifications up to 100km/h. We utilize engineered concrete ballast blocks for asphalt/paved surfaces and heavy-duty ground earth augers for lawns. Raised timber cassette flooring prevents mud or water ingress.'
+      q: 'How do you secure structures in outdoor weather?',
+      a: 'All structures use heavy concrete ballasts on hard ground and industrial anchoring on turf.'
     },
     {
-      q: 'What are your power requirements and generator policies?',
-      a: 'We operate our own fleet of 50kVA and 100kVA Cummins super-silent diesel generators equipped with automatic transfer switches. We recommend powering sound, LED screens, and heavy lighting independently from municipal power to guarantee zero disruption.'
+      q: 'Do you provide standby silent generators?',
+      a: 'Yes, 50kVA and 100kVA Cummins super-silent diesel generators with automatic transfer switches.'
     },
     {
-      q: 'What is included in the VIP Mobile Luxury Restroom service?',
-      a: 'Our trailers feature hotel-grade porcelain flush toilets, running fresh water, vanity mirrors, LED lighting, quiet air-conditioning, stereo background music, luxury hand soaps/lotions, and a dedicated uniformed hygiene attendant stationed throughout your celebration.'
+      q: 'What is included in the VIP Mobile Restroom service?',
+      a: 'Porcelain flush units, running water, vanity mirrors, ambient lighting, and dedicated hygiene attendants.'
     }
   ];
 
   return (
-    <div id="contact-booking-view" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20 space-y-16">
+    <div id="contact-booking-view" className="w-full pb-20 space-y-10">
       
-      {/* Header */}
-      <div className="text-center max-w-3xl mx-auto space-y-4">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-white border border-white/20 text-xs font-bold shadow-xs">
-          <Calendar className="w-4 h-4 text-blue-300" />
-          <span>Integrated Booking & Inquiries</span>
-        </div>
-        <h1 className={`text-3xl sm:text-5xl font-extrabold tracking-tight font-['Outfit'] ${t.headingText}`}>
-          Book Your Event Production or Inquire
-        </h1>
-        <p className={`text-xs sm:text-base leading-relaxed ${t.mutedText}`}>
-          Use our interactive booking wizard below to calculate an instant cost estimate and lock in your event date, or contact our production directors directly.
-        </p>
-      </div>
+      {/* 1. CINEMATIC GEOMETRIC HERO BANNER */}
+      <GeometricHeroBanner
+        badgeText="Instant Reservation & Real-Time Schedule Check"
+        badgeIcon={<Sparkles className="w-4 h-4 text-amber-300" />}
+        accentHeading="FAST DISPATCH & RIGGING"
+        primaryHeading="BOOK EQUIPMENT & RIGGING"
+        description="Lock in verified mega marquees, intelligent lighting trusses, crystal line-array audio, mobile VIP luxury restrooms, and heavy-duty generators with live schedule verification."
+        mainImage={bookingBannerBgImg}
+        secondaryImage={weddingVipGlassLoungeImg}
+        tertiaryImage={sblBusinessCardImg}
+        bgPatternImage={bookingBannerBgImg}
+        themeVariant="amber"
+        primaryCta={{
+          label: "WhatsApp Quick Quote",
+          href: COMPANY_CONTACT_INFO.whatsappUrl,
+          isExternal: true,
+          variant: "whatsapp",
+          icon: <MessageCircle className="w-4 h-4" />
+        }}
+        secondaryCta={{
+          label: "Call Hotline",
+          href: `tel:${COMPANY_CONTACT_INFO.primaryPhone}`,
+          icon: <Phone className="w-4 h-4" />
+        }}
+        customSlot={
+          /* Mode Switcher with Smooth Animation */
+          <div className="pt-1 flex flex-col sm:flex-row items-center gap-3">
+            <div className="p-1 rounded-2xl inline-flex gap-1 border bg-[#050811]/90 backdrop-blur-md border-amber-500/30 shadow-xl">
+              <button
+                type="button"
+                onClick={() => setActiveTab('booking')}
+                className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'booking'
+                    ? 'text-slate-950 shadow-md font-black'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {activeTab === 'booking' && (
+                  <motion.div
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 rounded-xl shadow-lg shadow-amber-500/25"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Reserve Date</span>
+                </span>
+              </button>
 
-      {/* Mode Switcher */}
-      <div className="flex justify-center">
-        <div className="p-1.5 rounded-2xl inline-flex gap-2 border bg-[#152A4A] border-white/15">
-          <button
-            onClick={() => setActiveTab('booking')}
-            className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'booking'
-                ? 'bg-white text-[#0F1F38] shadow-md'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Interactive Event Booking Wizard</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('inquiry')}
-            className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'inquiry'
-                ? 'bg-white text-[#0F1F38] shadow-md'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <Mail className="w-4 h-4" />
-            <span>Quick General Inquiry</span>
-          </button>
-        </div>
-      </div>
-
-      {/* SUCCESS BANNER */}
-      {isSuccess && (
-        <div className="rounded-3xl p-8 bg-[#132644] text-white border border-white/20 shadow-2xl space-y-4 text-center max-w-2xl mx-auto">
-          <div className="w-16 h-16 rounded-full bg-white text-[#0F1F38] flex items-center justify-center mx-auto shadow-lg">
-            <CheckCircle2 className="w-8 h-8" />
+              <button
+                type="button"
+                onClick={() => setActiveTab('inquiry')}
+                className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'inquiry'
+                    ? 'text-slate-950 shadow-md font-black'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {activeTab === 'inquiry' && (
+                  <motion.div
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 rounded-xl shadow-lg shadow-amber-500/25"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Ask a Question</span>
+                </span>
+              </button>
+            </div>
           </div>
-          <h2 className="text-2xl font-bold font-['Outfit']">Booking Request Dispatched!</h2>
-          <p className="text-sm text-slate-200">
-            Your booking reference is <strong className="text-white font-mono">{isSuccess}</strong>. Our logistics director is reviewing equipment availability and will call you with your confirmed staging itinerary.
-          </p>
-          <div className="pt-2">
-            <button
-              onClick={() => setIsSuccess(null)}
-              className="py-2.5 px-6 rounded-xl bg-white text-[#0F1F38] font-bold text-xs shadow-md"
-            >
-              Submit Another Booking or Close
-            </button>
-          </div>
-        </div>
-      )}
+        }
+        stats={[
+          { value: "0% Conflict", label: "Automated Buffer Guard" },
+          { value: "50+ Crew", label: "On-Site Dispatch" },
+          { value: "15 min", label: "Response Time" }
+        ]}
+      />
 
-      {/* TAB 1: FULL BOOKING WIZARD */}
+      {/* Main Container */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-10">
+
+      {/* Success Notification */}
+      <AnimatePresence>
+        {isSuccess && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="max-w-2xl mx-auto p-5 rounded-2xl bg-emerald-950/90 border border-emerald-400/40 text-white space-y-3 shadow-xl"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-sm">
+                ✓
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold">Booking Request Dispatched</h3>
+                <p className="text-xs text-emerald-200">
+                  Ref Code: <span className="font-mono font-extrabold text-amber-300 bg-black/30 px-2 py-0.5 rounded-md ml-1">{isSuccess}</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href={COMPANY_CONTACT_INFO.whatsappUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Confirm on WhatsApp</span>
+              </a>
+              <button
+                onClick={() => setIsSuccess(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer"
+              >
+                Book Another Date
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* TAB 1: RESERVATION FORM */}
       {activeTab === 'booking' && !isSuccess && (
-        <form onSubmit={handleBookingSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <form onSubmit={handleBookingSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+          {/* Anti-Bot Honeypot Protection */}
+          <input
+            type="text"
+            name="booking_security_check"
+            value={bookingHoneypot}
+            onChange={(e) => setBookingHoneypot(e.target.value)}
+            className="hidden opacity-0 pointer-events-none absolute -left-[9999px]"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+          />
           
-          {/* Main Wizard Form Steps */}
-          <div className="lg:col-span-8 space-y-8">
+          {/* Main Form Fields */}
+          <div className="lg:col-span-8 space-y-5">
             
             {/* Step 1: Contact Details */}
-            <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 sm:p-8 shadow-xl space-y-6`}>
-              <div className="flex items-center gap-3 pb-3 border-b border-white/10">
-                <span className="w-7 h-7 rounded-full bg-white text-[#0F1F38] font-extrabold text-xs flex items-center justify-center">
-                  1
-                </span>
-                <div>
-                  <h3 className="font-bold text-base text-white">Client & Host Information</h3>
-                  <p className="text-[11px] text-slate-300">Who should our production team contact?</p>
-                </div>
+            <div className="bg-[#0B1322] border border-amber-500/20 rounded-2xl p-4 sm:p-6 space-y-3.5 shadow-xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[11px] flex items-center justify-center font-extrabold">1</span>
+                  <span>Client &amp; Contact Info</span>
+                </h3>
+                <span className="text-[10px] text-amber-300/80 font-semibold">Required *</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Full Name *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold flex items-center gap-1">
+                    <span>Full Name *</span>
+                  </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. David Mukasa"
+                    placeholder="e.g. Sarah Nalubega"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400 transition-colors"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Phone / WhatsApp Number *</label>
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Phone / WhatsApp *</label>
                   <input
                     type="tel"
                     required
-                    placeholder="+256 700 000 000"
+                    placeholder="0752420911"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400 transition-colors"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Email Address</label>
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Email Address (Optional)</label>
                   <input
                     type="email"
-                    placeholder="david@example.com"
+                    placeholder="sarah@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400 transition-colors"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Company / Organization (If Applicable)</label>
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Organization / Family</label>
                   <input
                     type="text"
-                    placeholder="e.g. Mukasa Holdings / B2B Planner"
+                    placeholder="e.g. Kato Family / MTN"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400 transition-colors"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Step 2: Event Details */}
-            <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 sm:p-8 shadow-xl space-y-6`}>
-              <div className="flex items-center gap-3 pb-3 border-b border-white/10">
-                <span className="w-7 h-7 rounded-full bg-white text-[#0F1F38] font-extrabold text-xs flex items-center justify-center">
-                  2
-                </span>
-                <div>
-                  <h3 className="font-bold text-base text-white">Event Logistics & Dates</h3>
-                  <p className="text-[11px] text-slate-300">Set venue location, guest count, and duration</p>
-                </div>
+            {/* Step 2: Schedule & Live Date Availability Validation */}
+            <div className="bg-[#0B1322] border border-amber-500/20 rounded-2xl p-4 sm:p-6 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[11px] flex items-center justify-center font-extrabold">2</span>
+                  <span>Date &amp; Location</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('calendar')}
+                  className="text-[11px] text-amber-300 hover:text-amber-200 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                >
+                  <Calendar className="w-3 h-3" />
+                  <span>View Calendar</span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Event Category *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Event Type *</label>
                   <select
                     value={eventType}
                     onChange={(e) => setEventType(e.target.value as EventType)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white focus:outline-hidden focus:border-amber-400 transition-colors cursor-pointer"
                   >
-                    <option value="wedding">Luxury Wedding</option>
-                    <option value="corporate">Corporate Gala / Expo</option>
-                    <option value="concert">Concert / Festival</option>
-                    <option value="b2b-lending">B2B Tent Lending</option>
-                    <option value="private">Private Celebration</option>
+                    {eventCategories && eventCategories.length > 0 ? (
+                      eventCategories.filter(c => c.active).sort((a, b) => a.order - b.order).map((cat) => (
+                        <option key={cat.id} value={cat.slug}>
+                          {cat.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="wedding">Wedding / Kwanjula</option>
+                        <option value="corporate">Corporate Gala</option>
+                        <option value="concert">Concert / Stage</option>
+                        <option value="b2b-lending">B2B Hire</option>
+                        <option value="private">Private Event</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Event Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={eventDate}
-                    onChange={(e) => setEventDate(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white focus:outline-hidden focus:border-white"
-                  />
+                {/* Event Date with Live Validation Indicator */}
+                <div className="space-y-1 sm:col-span-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-200 font-semibold">Event Date *</label>
+                    <span className="text-[10px] text-slate-400">Min: Today</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      required
+                      min={todayDate}
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      className={`w-full h-11 bg-[#060B14] border rounded-xl px-3 text-white focus:outline-hidden transition-all ${
+                        dateValidation
+                          ? dateValidation.isValid
+                            ? 'border-emerald-400/80 bg-emerald-950/20'
+                            : 'border-rose-400 bg-rose-950/30'
+                          : 'border-white/20 focus:border-amber-400'
+                      }`}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Duration (Days)</label>
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Duration (Days)</label>
                   <input
                     type="number"
                     min="1"
                     max="14"
                     value={durationDays}
-                    onChange={(e) => setDurationDays(Number(e.target.value))}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white focus:outline-hidden focus:border-white"
+                    onChange={(e) => setDurationDays(Math.max(1, Number(e.target.value)))}
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white focus:outline-hidden focus:border-amber-400 transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Location / Town / Venue Name *</label>
+              {/* Real-time Date Status Feedback Banner with Clean Animation */}
+              <AnimatePresence mode="wait">
+                {dateValidation && (
+                  <motion.div
+                    key={dateValidation.status + eventDate + durationDays}
+                    initial={{ opacity: 0, height: 0, y: -6 }}
+                    animate={{ opacity: 1, height: 'auto', y: 0 }}
+                    exit={{ opacity: 0, height: 0, y: -6 }}
+                    transition={{ duration: 0.25 }}
+                    className="overflow-hidden"
+                  >
+                    {dateValidation.status === 'valid' && (
+                      <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-400/40 text-emerald-200 text-xs flex items-center justify-between gap-2 shadow-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span className="font-medium truncate">{dateValidation.message}</span>
+                        </div>
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 shrink-0">
+                          Available
+                        </span>
+                      </div>
+                    )}
+
+                    {dateValidation.status === 'past' && (
+                      <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-400/50 text-rose-200 text-xs flex items-start gap-2 shadow-xs">
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-rose-100">Past Date Selected</p>
+                          <p className="text-[11px] text-rose-200 leading-snug">{dateValidation.message}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {(dateValidation.status === 'unavailable' || dateValidation.status === 'buffer') && (
+                      <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-400/60 text-rose-200 text-xs space-y-2 shadow-sm">
+                        <div className="flex items-start gap-2">
+                          <CalendarX className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <p className="font-bold text-rose-100">
+                              {dateValidation.status === 'buffer' ? 'Mandatory Staging Buffer Day' : 'Date Unavailable'}
+                            </p>
+                            <p className="text-[11px] text-rose-200 leading-snug">{dateValidation.message}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-1 border-t border-rose-400/20 text-[11px]">
+                          <span className="text-rose-300">Please choose an open calendar slot</span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage('calendar')}
+                            className="font-bold text-white underline hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Open Schedule Map</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Location & Surface */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Location / Town / Venue *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Speke Resort Munyonyo Grounds"
+                    placeholder="e.g. Masaka, Lwengo, or Kampala"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400 transition-colors"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Venue Surface Type</label>
+                <div className="space-y-1">
+                  <label className="text-slate-200 font-semibold">Venue Surface</label>
                   <select
                     value={venueType}
                     onChange={(e) => setVenueType(e.target.value as any)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white focus:outline-hidden focus:border-amber-400 transition-colors cursor-pointer"
                   >
-                    <option value="outdoor_grass">Outdoor Natural Grass / Lawn</option>
-                    <option value="outdoor_concrete">Outdoor Paved / Concrete / Asphalt</option>
-                    <option value="indoor_hall">Indoor Auditorium / Hall</option>
-                    <option value="beach">Sandy Beach / Lakeside</option>
-                    <option value="private_compound">Private Residential Compound</option>
+                    <option value="outdoor_grass">Outdoor Lawn / Grass</option>
+                    <option value="outdoor_concrete">Paved / Concrete</option>
+                    <option value="indoor_hall">Indoor Hall / Auditorium</option>
+                    <option value="private_compound">Private Compound</option>
+                    <option value="beach">Beach / Lakefront</option>
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between font-bold text-white">
-                  <span>Anticipated Guest Count:</span>
-                  <span className="font-mono bg-white/10 px-2 py-0.5 rounded-md">{guestCount} Guests</span>
+              {/* Guest Count Selector */}
+              <div className="space-y-2 text-xs pt-1">
+                <div className="flex items-center justify-between text-slate-200 font-semibold">
+                  <span>Guest Capacity:</span>
+                  <span className="font-mono bg-[#060B14] px-2.5 py-0.5 rounded-lg text-amber-300 font-bold border border-amber-500/20">
+                    {guestCount} Guests
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -377,311 +680,363 @@ export const ContactBookingView: React.FC = () => {
                   step="50"
                   value={guestCount}
                   onChange={(e) => setGuestCount(Number(e.target.value))}
-                  className="w-full accent-white"
+                  className="w-full accent-amber-400 cursor-pointer"
                 />
+                <div className="flex justify-between text-[10px] text-slate-400 px-1">
+                  <span>50</span>
+                  <span>500</span>
+                  <span>1,500</span>
+                  <span>3,000+</span>
+                </div>
               </div>
             </div>
 
-            {/* Step 3: Equipment & Services Selection */}
-            <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 sm:p-8 shadow-xl space-y-6`}>
-              <div className="flex items-center gap-3 pb-3 border-b border-white/10">
-                <span className="w-7 h-7 rounded-full bg-white text-[#0F1F38] font-extrabold text-xs flex items-center justify-center">
-                  3
-                </span>
-                <div>
-                  <h3 className="font-bold text-base text-white">Required Services & Equipment</h3>
-                  <p className="text-[11px] text-slate-300">Select all modules needed for your staging</p>
-                </div>
+            {/* Step 3: Equipment & Services Grid */}
+            <div className="bg-[#0B1322] border border-amber-500/20 rounded-2xl p-4 sm:p-6 space-y-3.5 shadow-xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[11px] flex items-center justify-center font-extrabold">3</span>
+                  <span>Select Required Equipment</span>
+                </h3>
+                <span className="text-[11px] font-bold text-amber-300">{selectedServices.length} Selected</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 {services.map((s) => {
                   const isSelected = selectedServices.includes(s.id);
                   return (
-                    <div
+                    <motion.button
                       key={s.id}
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => toggleService(s.id)}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
                         isSelected
-                          ? 'bg-white text-[#0F1F38] border-white font-bold shadow-md'
-                          : 'bg-[#0E1D35] text-slate-300 border-white/15 hover:border-white/30'
+                          ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 border-amber-300 font-black shadow-lg shadow-amber-500/20'
+                          : 'bg-[#060B14] text-slate-200 border-white/15 hover:border-amber-400/40'
                       }`}
                     >
-                      <div>
-                        <p className="font-bold">{s.title}</p>
-                        <p className={`text-[10px] line-clamp-1 ${isSelected ? 'text-slate-700' : 'text-slate-400'}`}>
-                          Starts at ${s.basePrice} {s.priceUnit}
+                      <div className="truncate min-w-0">
+                        <p className="truncate text-xs font-bold">{s.title}</p>
+                        <p className={`text-[10px] truncate ${isSelected ? 'text-slate-900 font-semibold' : 'text-slate-400'}`}>
+                          {s.tagline}
                         </p>
                       </div>
-                      <div className={`w-5 h-5 rounded-md flex items-center justify-center border ${
-                        isSelected ? 'bg-[#0F1F38] border-transparent text-white' : 'border-white/30'
+
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
+                        isSelected ? 'bg-slate-950 text-amber-400 border-slate-950' : 'border-white/30 bg-white/5'
                       }`}>
                         {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </div>
-                    </div>
+                    </motion.button>
                   );
                 })}
               </div>
 
-              {/* Power & Addons */}
-              <div className="pt-4 border-t border-white/10 space-y-3">
-                <span className="text-xs font-bold text-white uppercase tracking-wider block">
-                  Power Infrastructure & Recommended Add-ons:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {AVAILABLE_ADDONS.map((addon) => {
-                    const isChecked = addons.some((a) => a.id === addon.id);
-                    return (
-                      <div
-                        key={addon.id}
-                        onClick={() => toggleAddon(addon.id, addon.name, addon.price)}
-                        className={`p-3 rounded-xl border text-xs cursor-pointer flex items-center justify-between transition-all ${
-                          isChecked
-                            ? 'bg-white text-[#0F1F38] border-white font-bold shadow-xs'
-                            : 'bg-[#0E1D35] text-slate-300 border-white/15'
-                        }`}
-                      >
-                        <div>
-                          <p className="font-semibold">{addon.name}</p>
-                          <span className={`text-[10px] ${isChecked ? 'text-slate-700' : 'text-slate-400'}`}>
-                            +${addon.price} / day
-                          </span>
-                        </div>
-                        <div className={`w-4 h-4 rounded-md flex items-center justify-center border ${
-                          isChecked ? 'bg-[#0F1F38] text-white border-transparent' : 'border-white/30'
-                        }`}>
-                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                        </div>
-                      </div>
-                    );
-                  })}
+              {/* Power preference pills */}
+              <div className="pt-2 border-t border-white/10 space-y-1.5 text-xs">
+                <label className="text-slate-200 font-semibold block">Power Supply Setup</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'generator_needed', label: 'Standby Generator' },
+                    { id: 'venue_power_available', label: 'Venue Power' },
+                    { id: 'unsure', label: 'Need Advice' },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPowerRequirement(p.id as any)}
+                      className={`py-2 px-1 rounded-xl border text-center text-[11px] font-medium transition-all cursor-pointer ${
+                        powerRequirement === p.id
+                          ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black border-amber-300 shadow-md'
+                          : 'bg-[#060B14] text-slate-300 border-white/15 hover:border-white/30'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Notes */}
-              <div className="space-y-1.5 text-xs">
-                <label className="font-bold text-white">Specific Technical Requests / Custom Rigging Notes</label>
+              {/* Special Requests */}
+              <div className="space-y-1 text-xs pt-1">
+                <label className="text-slate-200 font-semibold">Special Instructions (Optional)</label>
                 <textarea
-                  rows={3}
-                  placeholder="e.g. Need truss height clearance above 6m, dry-ice fog during bridal entrance, backup sound generator..."
+                  rows={2}
+                  placeholder="e.g. Stage height, lighting mood, color theme..."
                   value={customRequests}
                   onChange={(e) => setCustomRequests(e.target.value)}
-                  className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                  className="w-full bg-[#060B14] border border-white/20 rounded-xl p-2.5 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400 transition-colors"
                 />
               </div>
             </div>
 
           </div>
 
-          {/* Right Floating Order Summary Box */}
-          <div className="lg:col-span-4 sticky top-24 space-y-6">
-            <div className="bg-[#132644] rounded-3xl p-6 sm:p-7 border border-white/20 shadow-2xl text-white space-y-6">
-              <div>
-                <span className="text-xs text-blue-300 font-bold uppercase tracking-wider block">Live Estimate</span>
-                <h3 className="text-3xl font-black font-mono tracking-tight text-white mt-1">
-                  ${estimatedTotal.toLocaleString()}
-                </h3>
-                <p className="text-[11px] text-slate-300 mt-1">
-                  Estimated for {durationDays} day(s) • {guestCount} Guests
-                </p>
+          {/* Right Summary & Direct Action Column */}
+          <div className="lg:col-span-4 sticky top-24 space-y-4">
+            
+            {/* Quick Summary Card */}
+            <div className="bg-[#0B1322] rounded-2xl p-5 border border-amber-500/30 shadow-2xl text-white space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold font-['Outfit'] text-white">Reservation Summary</h3>
+                  <p className="text-[11px] text-amber-300/90 font-medium">
+                    {eventType.toUpperCase()} • {durationDays} Day(s)
+                  </p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                </div>
               </div>
 
-              <div className="space-y-2.5 border-t border-b border-white/10 py-4 text-xs">
+              <div className="space-y-2 border-t border-b border-white/10 py-3 text-xs">
                 <div className="flex justify-between text-slate-300">
                   <span>Selected Services:</span>
-                  <span className="font-mono text-white">{selectedServices.length} Selected</span>
+                  <span className="font-bold text-white">{selectedServices.length} Item(s)</span>
                 </div>
                 <div className="flex justify-between text-slate-300">
-                  <span>Power & Addons:</span>
-                  <span className="font-mono text-white">${addonsTotal}</span>
+                  <span>Target Guests:</span>
+                  <span className="font-bold text-amber-300">{guestCount} Pax</span>
                 </div>
                 <div className="flex justify-between text-slate-300">
-                  <span>On-site Inspection:</span>
-                  <span className="font-bold text-white">FREE Included</span>
-                </div>
-                <div className="flex justify-between text-slate-300">
-                  <span>Certified Rigging Crew:</span>
-                  <span className="font-bold text-white">Included</span>
+                  <span>Rigging &amp; Transport:</span>
+                  <span className="font-bold text-emerald-300">Included</span>
                 </div>
               </div>
 
-              <button
+              {/* Submit CTA */}
+              <motion.button
                 type="submit"
-                className="w-full py-4 px-6 rounded-xl bg-white hover:bg-slate-100 text-[#0F1F38] font-extrabold text-sm shadow-xl transition-all flex items-center justify-center gap-2"
+                whileTap={{ scale: 0.98 }}
+                disabled={dateValidation ? !dateValidation.isValid : false}
+                className={`w-full py-3.5 px-4 rounded-xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  dateValidation && !dateValidation.isValid
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+                    : 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-500/25'
+                }`}
               >
                 <Calendar className="w-4 h-4" />
-                <span>Confirm & Lock In Booking</span>
-              </button>
+                <span>Confirm Reservation Request</span>
+              </motion.button>
 
-              <div className="space-y-2 text-[11px] text-slate-300 pt-2 border-t border-white/10">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-blue-300 shrink-0" />
-                  <span>No payment required right now. Our director verifies date logistics first.</span>
+              <p className="text-[10px] text-slate-400 text-center">
+                Instant confirmation code generated upon request.
+              </p>
+            </div>
+
+            {/* Direct Contact & WhatsApp */}
+            <div className="bg-[#0B1322] rounded-2xl p-4 border border-amber-500/20 text-white space-y-3 text-xs shadow-xl">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Direct Support</span>
+                <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold px-2 py-0.5 rounded-full">
+                  Online
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={COMPANY_CONTACT_INFO.whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp</span>
+                </a>
+                <a
+                  href={`tel:${COMPANY_CONTACT_INFO.primaryPhone}`}
+                  className="py-2.5 px-3 rounded-xl bg-[#060B14] hover:bg-amber-400/20 border border-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Phone className="w-4 h-4 text-amber-400" />
+                  <span>Call Us</span>
+                </a>
+              </div>
+
+              <div className="pt-2 border-t border-white/10 text-[11px] text-slate-300 space-y-1">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="truncate">{COMPANY_CONTACT_INFO.email}</span>
+                </div>
+                <div className="flex items-center gap-1.5 truncate">
+                  <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="truncate">{COMPANY_CONTACT_INFO.address}</span>
                 </div>
               </div>
             </div>
 
-            {/* Quick Contact Card */}
-            <div className="bg-[#132644] rounded-3xl p-6 border border-white/20 text-white space-y-4 text-xs">
-              <h4 className="font-bold text-sm text-white">Direct Production Hotline</h4>
-              <div className="space-y-2.5 text-slate-300">
-                <div className="flex items-center gap-2.5">
-                  <Phone className="w-4 h-4 text-white shrink-0" />
-                  <a href={`tel:${COMPANY_CONTACT_INFO.phone}`} className="text-white font-bold hover:underline">
-                    {COMPANY_CONTACT_INFO.phone}
-                  </a>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Mail className="w-4 h-4 text-white shrink-0" />
-                  <a href={`mailto:${COMPANY_CONTACT_INFO.email}`} className="text-white hover:underline">
-                    {COMPANY_CONTACT_INFO.email}
-                  </a>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <MapPin className="w-4 h-4 text-white shrink-0 mt-0.5" />
-                  <span>{COMPANY_CONTACT_INFO.address}</span>
-                </div>
-              </div>
-            </div>
           </div>
 
         </form>
       )}
 
-      {/* TAB 2: SIMPLE GENERAL INQUIRY */}
+      {/* TAB 2: INQUIRY FORM */}
       {activeTab === 'inquiry' && (
-        <div className="max-w-2xl mx-auto">
-          <form onSubmit={handleInquirySubmit} className="bg-[#132644] rounded-3xl p-6 sm:p-10 border border-white/20 shadow-2xl text-white space-y-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-xl mx-auto"
+        >
+          <form onSubmit={handleInquirySubmit} className="bg-[#0B1322] rounded-2xl p-5 sm:p-7 border border-amber-500/30 shadow-2xl text-white space-y-4">
+            {/* Anti-Bot Honeypot Protection */}
+            <input
+              type="text"
+              name="inquiry_security_check"
+              value={inquiryHoneypot}
+              onChange={(e) => setInquiryHoneypot(e.target.value)}
+              className="hidden opacity-0 pointer-events-none absolute -left-[9999px]"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+            />
             <div>
-              <h3 className="text-2xl font-bold font-['Outfit']">Send a Message to SBL Events</h3>
-              <p className="text-xs text-slate-300 mt-1">
-                Have custom stage dimensions, tender requirements, or B2B tent lending questions? Let us know.
+              <h3 className="text-lg font-bold font-['Outfit'] text-white">Send a Message</h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Questions on custom tent sizes, staging trusses, or B2B peer hire?
               </p>
             </div>
 
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Your Name *</label>
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-200">Your Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Brenda Nalwanga"
+                    placeholder="e.g. John Bosco"
                     value={inquiryName}
                     onChange={(e) => setInquiryName(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Phone Number *</label>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-200">Phone Number *</label>
                   <input
                     type="tel"
                     required
-                    placeholder="+256 700 000 000"
+                    placeholder="0752420911"
                     value={inquiryPhone}
                     onChange={(e) => setInquiryPhone(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Email Address</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-200">Email (Optional)</label>
                   <input
                     type="email"
-                    placeholder="brenda@example.com"
+                    placeholder="john@example.com"
                     value={inquiryEmail}
                     onChange={(e) => setInquiryEmail(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-white">Inquiry Subject</label>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-200">Subject</label>
                   <select
                     value={inquirySubject}
                     onChange={(e) => setInquirySubject(e.target.value)}
-                    className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white focus:outline-hidden focus:border-white"
+                    className="w-full h-11 bg-[#060B14] border border-white/20 rounded-xl px-3 text-white focus:outline-hidden focus:border-amber-400 cursor-pointer"
                   >
                     <option value="General Equipment Rental">General Equipment Rental</option>
-                    <option value="B2B Tent Lending Wholesale">B2B Tent Lending / Peer Sub-Hire</option>
-                    <option value="Corporate Gala Tender">Corporate Gala / Festival Tender</option>
-                    <option value="Venue Inspection Request">Free Venue Inspection Request</option>
+                    <option value="B2B Tent Lending Wholesale">B2B Tent Lending / Peer Hire</option>
+                    <option value="Corporate Event Tender">Corporate Event Tender</option>
+                    <option value="Site Inspection Request">Site Inspection Request</option>
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="font-bold text-white">Your Message & Requirements *</label>
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-200">Message *</label>
                 <textarea
-                  rows={5}
+                  rows={3}
                   required
-                  placeholder="Describe your event dates, location, equipment needs, or questions..."
+                  placeholder="Describe your equipment needs, dates, or venue..."
                   value={inquiryMessage}
                   onChange={(e) => setInquiryMessage(e.target.value)}
-                  className="w-full bg-[#0E1D35] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-white"
+                  className="w-full bg-[#060B14] border border-white/20 rounded-xl p-3 text-white placeholder-slate-400 focus:outline-hidden focus:border-amber-400"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 px-6 rounded-xl bg-white hover:bg-slate-100 text-[#0F1F38] font-extrabold text-sm shadow-xl transition-all flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Send className="w-4 h-4" />
-                <span>Send Inquiry Message</span>
+                <span>Send Quick Message</span>
               </button>
             </div>
           </form>
-        </div>
+        </motion.div>
       )}
 
-      {/* FAQS SECTION */}
-      <div className="max-w-4xl mx-auto space-y-6 pt-10">
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white border border-white/20 text-xs font-bold">
-            <HelpCircle className="w-3.5 h-3.5 text-blue-300" />
+      {/* FAQs Section - Clean Accordion */}
+      <ScrollReveal className="max-w-2xl mx-auto space-y-3 pt-4" yOffset={30}>
+        <div className="text-center space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold">
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
             <span>Frequently Asked Questions</span>
           </div>
-          <h3 className={`text-2xl sm:text-3xl font-extrabold tracking-tight font-['Outfit'] ${t.headingText}`}>
-            Important Logistics & Booking Guidelines
+          <h3 className="text-lg sm:text-xl font-extrabold font-['Outfit'] text-white">
+            Booking &amp; Rental FAQs
           </h3>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           {faqs.map((faq, idx) => {
             const isOpen = openFaq === idx;
             return (
               <div
                 key={idx}
-                className={`border rounded-2xl overflow-hidden transition-all ${
-                  t.cardBg
-                } ${t.cardBorder}`}
+                className="border border-white/15 bg-[#0B1322] rounded-xl overflow-hidden shadow-md transition-colors"
               >
                 <button
                   type="button"
                   onClick={() => setOpenFaq(isOpen ? null : idx)}
-                  className="w-full p-4 sm:p-5 text-left text-xs sm:text-sm font-bold flex items-center justify-between gap-4 text-white"
+                  className="w-full p-3.5 text-left text-xs sm:text-sm font-bold flex items-center justify-between gap-3 text-white cursor-pointer"
                 >
                   <span>{faq.q}</span>
                   {isOpen ? (
-                    <ChevronUp className="w-4 h-4 text-blue-300 shrink-0" />
+                    <ChevronUp className="w-4 h-4 text-amber-400 shrink-0" />
                   ) : (
                     <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   )}
                 </button>
 
-                {isOpen && (
-                  <div className="p-4 sm:p-5 pt-0 text-xs sm:text-sm text-slate-300 leading-relaxed border-t border-white/10">
-                    {faq.a}
-                  </div>
-                )}
+                <AnimatePresence>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-3.5 pt-0 text-xs text-slate-300 leading-relaxed border-t border-white/10">
+                        {faq.a}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}
         </div>
+      </ScrollReveal>
+
       </div>
+
+      {/* Celebratory Success Modal */}
+      <CelebrationSuccessModal
+        isOpen={isCelebrationOpen}
+        onClose={() => setIsCelebrationOpen(false)}
+        booking={celebrationData}
+        onNavigateHome={() => setCurrentPage('home')}
+      />
 
     </div>
   );
