@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { AdminContentSyncProvider } from './context/AdminContentSyncContext';
 import { Navbar } from './components/Navbar';
@@ -40,9 +40,55 @@ const AppContent: React.FC = () => {
     isEmailModalOpen, 
     closeEmailModal, 
     activeEmailConfirmation, 
-    triggerMockEmailConfirmation 
+    triggerMockEmailConfirmation,
+    openSearch,
+    toggleSearch,
+    openShortcuts,
+    openBookingModal
   } = useApp();
   const t = getThemeClasses(theme);
+
+  // Global Hotkeys for instant access
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger single-letter shortcuts when focused in inputs or textareas
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
+
+      // Cmd/Ctrl + K -> Toggle Global Search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        toggleSearch();
+        return;
+      }
+
+      if (isInput) return;
+
+      // '/' to quick-search
+      if (e.key === '/') {
+        e.preventDefault();
+        openSearch();
+        return;
+      }
+
+      // '?' to open shortcuts
+      if (e.key === '?') {
+        e.preventDefault();
+        openShortcuts();
+        return;
+      }
+
+      // 'b' or 'B' to open booking modal
+      if (e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        openBookingModal();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [toggleSearch, openSearch, openShortcuts, openBookingModal]);
 
   const renderCurrentView = () => {
     switch (currentPage) {

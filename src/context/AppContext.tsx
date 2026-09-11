@@ -142,6 +142,7 @@ interface AppContextType {
   
   // Calendar actions
   addCalendarEvent: (event: Omit<CalendarEvent, 'id'>) => void;
+  updateCalendarEvent: (id: string, updates: Partial<CalendarEvent>) => void;
   deleteCalendarEvent: (id: string) => void;
   
   // Testimonial actions
@@ -1791,6 +1792,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Calendar Updated', `Added "${newEvt.title}" to event schedule.`, 'success');
   };
 
+  const updateCalendarEvent = (id: string, updates: Partial<CalendarEvent>) => {
+    setCalendarEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
+    );
+    const existing = calendarEvents.find((e) => e.id === id);
+    if (existing) {
+      saveCalendarEventToStore({ ...existing, ...updates }).catch(console.error);
+    }
+    showToast('Schedule Updated', 'Calendar event details saved.', 'success');
+  };
+
   const deleteCalendarEvent = (id: string) => {
     setCalendarEvents((prev) => prev.filter((e) => e.id !== id));
     deleteCalendarEventFromStore(id).catch(console.error);
@@ -2197,6 +2209,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCallbackStatus,
         deleteCallbackRequest,
         addCalendarEvent,
+        updateCalendarEvent,
         deleteCalendarEvent,
         addTestimonial,
         addAdminTestimonial,

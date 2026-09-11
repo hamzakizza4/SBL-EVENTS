@@ -133,7 +133,7 @@ export const AdminCardEditModal: React.FC = () => {
           clientName: formData.clientName || data.clientName,
           status: formData.status || data.status
         };
-        updateCalendarEvent({ ...data, ...updates });
+        updateCalendarEvent(data.id, updates);
         showToast('Calendar Event Updated', `Event "${updates.title}" updated on schedule.`, 'success');
       }
 

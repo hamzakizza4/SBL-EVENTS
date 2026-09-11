@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { Page, Service, GalleryItem, InventoryItem, Booking, CalendarEvent, CallbackRequest, Testimonial } from '../types';
@@ -37,7 +37,18 @@ import {
   Award,
   Filter,
   Flame,
-  CreditCard
+  CreditCard,
+  Tent,
+  Zap,
+  Tv,
+  Volume2,
+  Bath,
+  Truck,
+  Tag,
+  SlidersHorizontal,
+  ArrowRight,
+  Sparkle,
+  RotateCcw
 } from 'lucide-react';
 
 export type SearchCategoryType = 
@@ -50,6 +61,37 @@ export type SearchCategoryType =
   | 'page' 
   | 'action' 
   | 'faq';
+
+export interface ServiceCategoryOption {
+  id: string;
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  keywords: string[];
+}
+
+export const BASE_SERVICE_CATEGORIES: ServiceCategoryOption[] = [
+  { id: 'all', label: 'All Service Categories', shortLabel: 'All Services', icon: Layers, keywords: ['all', 'every', 'fleet', 'gear'] },
+  { id: 'tents', label: 'Mega Tents & Stages', shortLabel: 'Tents & Stages', icon: Tent, keywords: ['tent', 'tents', 'marquee', 'alpine', 'stage', 'truss', 'dome', 'canopy', 'shelter', 'catwalk'] },
+  { id: 'lighting', label: 'Intelligent Lighting', shortLabel: 'Lighting & FX', icon: Zap, keywords: ['light', 'lighting', 'beam', 'spot', 'wash', 'moving head', 'dmx', 'laser', 'ambient', 'uplighting', 'fog'] },
+  { id: 'screens', label: 'LED Video Screens', shortLabel: 'LED Screens', icon: Tv, keywords: ['screen', 'screens', 'led', 'video', 'display', 'p3.9', 'p2.6', 'wall', 'panel', 'visual'] },
+  { id: 'sound-mc', label: 'Mobile Disco & Sound', shortLabel: 'Sound & Disco', icon: Volume2, keywords: ['sound', 'audio', 'disco', 'speaker', 'line array', 'mic', 'microphone', 'mc', 'dj', 'pa system', 'acoustic'] },
+  { id: 'production', label: 'Decor & Planning', shortLabel: 'Decor & Planning', icon: Sparkle, keywords: ['decor', 'decoration', 'kwanjula', 'planning', 'stage decor', 'drape', 'flower', 'wedding', 'table', 'chair'] },
+  { id: 'restrooms', label: 'Mobile Restrooms', shortLabel: 'Restrooms', icon: Bath, keywords: ['restroom', 'toilet', 'sanitation', 'mobile restroom', 'vip restroom', 'trailer', 'washroom', 'vanity'] },
+  { id: 'b2b-lending', label: 'B2B Equipment Hire', shortLabel: 'B2B Hire', icon: Truck, keywords: ['b2b', 'hire', 'lending', 'wholesale', 'planner', 'sub-rental', 'generator', 'heavy equipment'] },
+];
+
+export interface RealtimeSuggestion {
+  id: string;
+  type: 'service-category' | 'service' | 'inventory' | 'client' | 'archive' | 'keyword';
+  title: string;
+  subtitle?: string;
+  badge: string;
+  badgeColor?: string;
+  icon: React.ReactNode;
+  actionText?: string;
+  onApply: () => void;
+}
 
 export interface SearchResult {
   id: string;
@@ -93,6 +135,8 @@ export interface SearchResult {
     isFeatured?: boolean;
     image: string;
   };
+  serviceCategory?: string;
+  serviceCategoryLabel?: string;
   serviceData?: {
     title: string;
     tagline: string;
@@ -102,6 +146,8 @@ export interface SearchResult {
     b2bAvailable?: boolean;
     image: string;
     features?: string[];
+    serviceCategory?: string;
+    serviceCategoryLabel?: string;
   };
   inventoryData?: {
     name: string;
@@ -113,8 +159,42 @@ export interface SearchResult {
     image?: string;
     b2bEligible?: boolean;
   };
+  searchIndex?: string;
   onSelect: () => void;
 }
+
+// Highlight matched substring in real-time (memoized for zero unnecessary rerenders)
+export const HighlightMatch: React.FC<{ text?: string; query: string; className?: string }> = React.memo(({ text, query, className }) => {
+  if (!text) return null;
+  const q = query.trim().toLowerCase();
+  if (!q) return <span className={className}>{text}</span>;
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx === -1) return <span className={className}>{text}</span>;
+  const before = text.substring(0, idx);
+  const match = text.substring(idx, idx + q.length);
+  const after = text.substring(idx + q.length);
+  return (
+    <span className={className}>
+      {before}
+      <mark className="bg-amber-400/40 text-amber-100 rounded-xs px-0.5 font-bold not-italic">
+        {match}
+      </mark>
+      {after}
+    </span>
+  );
+});
+
+export const POPULAR_SEARCH_SUGGESTIONS = [
+  { label: 'Mega Tents', query: 'Mega Tents', icon: Tent, serviceCategory: 'tents' },
+  { label: 'LED Screens', query: 'LED Screens', icon: Tv, serviceCategory: 'screens' },
+  { label: 'Intelligent Lighting', query: 'Lighting', icon: Zap, serviceCategory: 'lighting' },
+  { label: 'Mobile Disco & Sound', query: 'Sound', icon: Volume2, serviceCategory: 'sound-mc' },
+  { label: 'Kwanjula Stages', query: 'Kwanjula', icon: Sparkle, serviceCategory: 'production' },
+  { label: 'VIP Restrooms', query: 'Restroom', icon: Bath, serviceCategory: 'restrooms' },
+  { label: '100kVA Generator', query: '100kVA', icon: Truck, serviceCategory: 'b2b-lending' },
+  { label: 'Ref: SBL-2026-9042', query: 'SBL-2026-9042', icon: Users, serviceCategory: 'all' },
+  { label: 'Speke Resort Munyonyo', query: 'Speke Resort', icon: MapPin, serviceCategory: 'all' },
+];
 
 export const GlobalSearchModal: React.FC = () => {
   const { 
@@ -130,41 +210,57 @@ export const GlobalSearchModal: React.FC = () => {
     callbackRequests,
     testimonials,
     openShortcuts,
-    showToast
+    showToast,
+    eventCategories
   } = useApp();
 
   const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
   const [activeCategory, setActiveCategory] = useState<SearchCategoryType>('all');
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('all');
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [copiedRef, setCopiedRef] = useState<string | null>(null);
 
-  // 3D Tilt interactive state for preview card
-  const [cardTilt, setCardTilt] = useState<{ rotateX: number; rotateY: number; mouseX: number; mouseY: number }>({
-    rotateX: 0,
-    rotateY: 0,
-    mouseX: 50,
-    mouseY: 50
-  });
+  // Dynamic available service categories combining base options and admin eventCategories
+  const availableServiceCategories = useMemo<ServiceCategoryOption[]>(() => {
+    const list = [...BASE_SERVICE_CATEGORIES];
+    if (eventCategories && eventCategories.length > 0) {
+      eventCategories.filter(c => c.active).forEach(cat => {
+        if (!list.some(item => item.id === cat.slug)) {
+          list.push({
+            id: cat.slug,
+            label: cat.name,
+            shortLabel: cat.name.split(' ')[0] || cat.name,
+            icon: Sparkle,
+            keywords: [cat.name.toLowerCase(), cat.slug.toLowerCase(), ...(cat.recommendedServices || [])]
+          });
+        }
+      });
+    }
+    return list;
+  }, [eventCategories]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const previewCardRef = useRef<HTMLDivElement>(null);
+  const specularGlowRef = useRef<HTMLDivElement>(null);
 
-  // Auto-focus input and reset state when opened
+  // Instant auto-focus input and reset state when opened
   useEffect(() => {
     if (isSearchOpen) {
       setQuery('');
       setSelectedIndex(0);
       setActiveCategory('all');
-      setCardTilt({ rotateX: 0, rotateY: 0, mouseX: 50, mouseY: 50 });
-      setTimeout(() => {
+      setSelectedServiceCategory('all');
+      // Direct focus without delay for instantaneous responsiveness
+      requestAnimationFrame(() => {
         inputRef.current?.focus();
-      }, 60);
+      });
     }
   }, [isSearchOpen]);
 
-  // Handle 3D perspective mouse movement
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Handle 3D perspective mouse movement via direct DOM mutation (0 React re-renders)
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!previewCardRef.current) return;
     const rect = previewCardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -178,17 +274,20 @@ export const GlobalSearchModal: React.FC = () => {
     const rotateY = normalizedX * 8;
     const rotateX = -normalizedY * 8;
     
-    setCardTilt({
-      rotateX,
-      rotateY,
-      mouseX: (x / rect.width) * 100,
-      mouseY: (y / rect.height) * 100
-    });
-  };
+    previewCardRef.current.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.01, 1.01, 1.01)`;
+    if (specularGlowRef.current) {
+      specularGlowRef.current.style.background = `radial-gradient(circle at ${(x / rect.width) * 100}% ${(y / rect.height) * 100}%, rgba(245, 158, 11, 0.25) 0%, transparent 60%)`;
+    }
+  }, []);
 
-  const handleMouseLeave = () => {
-    setCardTilt({ rotateX: 0, rotateY: 0, mouseX: 50, mouseY: 50 });
-  };
+  const handleMouseLeave = useCallback(() => {
+    if (previewCardRef.current) {
+      previewCardRef.current.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
+    }
+    if (specularGlowRef.current) {
+      specularGlowRef.current.style.background = 'radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.2) 0%, transparent 60%)';
+    }
+  }, []);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -199,6 +298,7 @@ export const GlobalSearchModal: React.FC = () => {
 
   // Construct comprehensive search pool including Historical Event Archives and Client Details
   const allResults = useMemo<SearchResult[]>(() => {
+    if (!isSearchOpen) return [];
     const results: SearchResult[] = [];
 
     // 1. CLIENT DETAILS & LIVE BOOKINGS
@@ -357,17 +457,22 @@ export const GlobalSearchModal: React.FC = () => {
 
     // 3. SERVICES & PRODUCTION RIGS
     services.forEach((srv: Service) => {
+      const catOption = availableServiceCategories.find(c => c.id === srv.category);
+      const catLabel = catOption?.label || (srv.category ? srv.category.toUpperCase() : 'General Service');
+
       results.push({
         id: `service-${srv.id}`,
         category: 'service',
         categoryLabel: 'Services & Rigging',
+        serviceCategory: srv.category,
+        serviceCategoryLabel: catLabel,
         title: srv.title,
         subtitle: `${srv.capacityOrScale || 'All Scales'} • ${srv.tagline}`,
         badge: srv.b2bAvailable ? 'B2B Wholesale' : 'Production Fleet',
         badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
         icon: <Package className="w-4 h-4 text-amber-400" />,
         image: srv.image,
-        highlightMeta: `${srv.fullDesc} ${srv.shortDesc} ${srv.features.join(' ')}`,
+        highlightMeta: `${srv.fullDesc} ${srv.shortDesc} ${srv.features.join(' ')} ${srv.category} ${catLabel}`,
         serviceData: {
           title: srv.title,
           tagline: srv.tagline,
@@ -376,7 +481,9 @@ export const GlobalSearchModal: React.FC = () => {
           capacity: srv.capacityOrScale,
           b2bAvailable: srv.b2bAvailable,
           image: srv.image,
-          features: srv.features
+          features: srv.features,
+          serviceCategory: srv.category,
+          serviceCategoryLabel: catLabel
         },
         onSelect: () => {
           setCurrentPage('home');
@@ -390,18 +497,34 @@ export const GlobalSearchModal: React.FC = () => {
     });
 
     // 4. WAREHOUSE INVENTORY FLEET
+    const invToServiceCatMap: Record<string, string> = {
+      'Tents & Structures': 'tents',
+      'Video & Screens': 'screens',
+      'Audio & Sound': 'sound-mc',
+      'Staging & Truss': 'tents',
+      'Restrooms & Sanitation': 'restrooms',
+      'Lighting & FX': 'lighting',
+      'Decoration & Seating': 'production',
+      'Power & Logistics': 'b2b-lending'
+    };
+
     inventory.forEach((inv: InventoryItem) => {
+      const srvCat = invToServiceCatMap[inv.category] || 'b2b-lending';
+      const catOption = availableServiceCategories.find(c => c.id === srvCat);
+
       results.push({
         id: `inventory-${inv.id}`,
         category: 'inventory',
         categoryLabel: 'Warehouse Fleet Inventory',
+        serviceCategory: srvCat,
+        serviceCategoryLabel: catOption?.label || inv.category,
         title: inv.name,
         subtitle: `Rate: UGX ${inv.dailyRate?.toLocaleString()} ${inv.unit} • ${inv.specs}`,
         badge: `${inv.availableQuantity}/${inv.totalQuantity} In Stock`,
         badgeColor: inv.availableQuantity > 0 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-red-500/20 text-red-300 border-red-500/40',
         icon: <Layers className="w-4 h-4 text-teal-400" />,
         image: inv.image,
-        highlightMeta: `${inv.category} ${inv.specs} ${inv.unit}`,
+        highlightMeta: `${inv.category} ${inv.specs} ${inv.unit} ${catOption?.label || ''}`,
         inventoryData: {
           name: inv.name,
           available: inv.availableQuantity,
@@ -572,31 +695,194 @@ export const GlobalSearchModal: React.FC = () => {
       });
     });
 
-    return results;
-  }, [bookings, callbackRequests, galleryItems, calendarEvents, services, inventory, testimonials, setCurrentPage, closeSearch, openBookingModal, openShortcuts, showToast]);
+    // Precompute lowercase searchIndex for instant sub-millisecond filtering
+    results.forEach(item => {
+      item.searchIndex = `${item.title} ${item.subtitle || ''} ${item.highlightMeta || ''} ${item.categoryLabel} ${item.badge || ''} ${item.serviceCategoryLabel || ''}`.toLowerCase();
+    });
 
-  // Filter based on search query & active category
-  const queryClean = query.trim().toLowerCase();
+    return results;
+  }, [isSearchOpen, bookings, callbackRequests, galleryItems, calendarEvents, services, inventory, testimonials, availableServiceCategories, setCurrentPage, closeSearch, openBookingModal, openShortcuts, showToast]);
+
+  // Filter based on deferred search query (guarantees zero keystroke delay)
+  const queryClean = deferredQuery.trim().toLowerCase();
   
   const filteredResults = useMemo(() => {
+    if (!isSearchOpen || allResults.length === 0) return [];
+    const tokens = queryClean ? queryClean.split(/\s+/).filter(Boolean) : [];
+
     return allResults.filter(item => {
+      // 1. Primary category filter
       const matchesCategory = 
         activeCategory === 'all' || 
         item.category === activeCategory ||
         (activeCategory === 'gallery' && item.category === 'archive');
 
       if (!matchesCategory) return false;
-      if (!queryClean) return true;
 
-      const inTitle = item.title.toLowerCase().includes(queryClean);
-      const inSubtitle = item.subtitle ? item.subtitle.toLowerCase().includes(queryClean) : false;
-      const inMeta = item.highlightMeta ? item.highlightMeta.toLowerCase().includes(queryClean) : false;
-      const inCategory = item.categoryLabel.toLowerCase().includes(queryClean);
-      const inBadge = item.badge ? item.badge.toLowerCase().includes(queryClean) : false;
+      // 2. Service category filter
+      if (selectedServiceCategory !== 'all') {
+        if (item.category === 'service') {
+          const matchesDirect = item.serviceCategory === selectedServiceCategory;
+          const customCat = eventCategories?.find(c => c.slug === selectedServiceCategory);
+          const matchesCustom = customCat && customCat.recommendedServices?.some(id => item.id.includes(id));
+          if (!matchesDirect && !matchesCustom) return false;
+        } else if (item.serviceCategory) {
+          if (item.serviceCategory !== selectedServiceCategory) return false;
+        } else if (activeCategory === 'service') {
+          return false;
+        }
+      }
 
-      return inTitle || inSubtitle || inMeta || inCategory || inBadge;
+      // 3. Fast token-based index search (instant execution)
+      if (tokens.length === 0) return true;
+
+      const idx = item.searchIndex || '';
+      for (let i = 0; i < tokens.length; i++) {
+        if (!idx.includes(tokens[i])) return false;
+      }
+
+      return true;
     });
-  }, [allResults, activeCategory, queryClean]);
+  }, [allResults, activeCategory, selectedServiceCategory, queryClean, eventCategories, isSearchOpen]);
+
+  // Real-time dynamic suggestions computed with deferred query
+  const realtimeSuggestions = useMemo<RealtimeSuggestion[]>(() => {
+    if (!isSearchOpen) return [];
+    const q = queryClean;
+    if (!q) return [];
+
+    const suggestions: RealtimeSuggestion[] = [];
+
+    // 1. Check matching Service Categories
+    availableServiceCategories.forEach(cat => {
+      if (cat.id === 'all') return;
+      const matchesLabel = cat.label.toLowerCase().includes(q);
+      const matchesShort = cat.shortLabel.toLowerCase().includes(q);
+      const matchesKeyword = cat.keywords.some(k => k.includes(q) || q.includes(k));
+
+      if (matchesLabel || matchesShort || matchesKeyword) {
+        const IconComponent = cat.icon;
+        const count = services.filter(s => s.category === cat.id).length;
+        suggestions.push({
+          id: `sug-cat-${cat.id}`,
+          type: 'service-category',
+          title: `Filter Category: ${cat.label}`,
+          subtitle: `${count} Production Services • Rigging & Equipment`,
+          badge: 'Category Filter',
+          badgeColor: 'bg-amber-400 text-slate-950 font-black border-amber-300 shadow-md',
+          icon: <IconComponent className="w-3.5 h-3.5 text-slate-950" />,
+          actionText: 'Apply Filter',
+          onApply: () => {
+            setSelectedServiceCategory(cat.id);
+            setActiveCategory('service');
+            setSelectedIndex(0);
+            showToast('Category Filter Applied', `Showing results in "${cat.label}".`, 'info');
+          }
+        });
+      }
+    });
+
+    // 2. Check matching Services
+    services.forEach(srv => {
+      if (
+        srv.title.toLowerCase().includes(q) || 
+        srv.tagline.toLowerCase().includes(q) || 
+        srv.features.some(f => f.toLowerCase().includes(q))
+      ) {
+        suggestions.push({
+          id: `sug-srv-${srv.id}`,
+          type: 'service',
+          title: srv.title,
+          subtitle: srv.tagline,
+          badge: 'Service',
+          badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+          icon: <Package className="w-3.5 h-3.5 text-amber-400" />,
+          actionText: 'Select',
+          onApply: () => {
+            setQuery(srv.title);
+            setSelectedServiceCategory(srv.category);
+            setActiveCategory('service');
+            setSelectedIndex(0);
+          }
+        });
+      }
+    });
+
+    // 3. Check matching Clients & References
+    bookings.forEach(b => {
+      const matchName = b.clientName.toLowerCase().includes(q);
+      const matchRef = b.referenceNumber.toLowerCase().includes(q);
+      const matchLoc = b.location.toLowerCase().includes(q);
+      if (matchName || matchRef || matchLoc) {
+        suggestions.push({
+          id: `sug-bkg-${b.id}`,
+          type: 'client',
+          title: b.clientName,
+          subtitle: `Ref: ${b.referenceNumber} • ${b.location} (${b.eventDate})`,
+          badge: 'Client Record',
+          badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+          icon: <Users className="w-3.5 h-3.5 text-emerald-400" />,
+          actionText: 'Open',
+          onApply: () => {
+            setQuery(b.clientName);
+            setActiveCategory('clients');
+            setSelectedIndex(0);
+          }
+        });
+      }
+    });
+
+    // 4. Check matching Inventory Fleet
+    inventory.forEach(inv => {
+      if (
+        inv.name.toLowerCase().includes(q) || 
+        inv.specs.toLowerCase().includes(q) || 
+        inv.category.toLowerCase().includes(q)
+      ) {
+        suggestions.push({
+          id: `sug-inv-${inv.id}`,
+          type: 'inventory',
+          title: inv.name,
+          subtitle: `${inv.specs} • Stock: ${inv.availableQuantity}/${inv.totalQuantity}`,
+          badge: 'Warehouse Fleet',
+          badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+          icon: <Layers className="w-3.5 h-3.5 text-teal-400" />,
+          actionText: 'Inspect',
+          onApply: () => {
+            setQuery(inv.name);
+            setActiveCategory('inventory');
+            setSelectedIndex(0);
+          }
+        });
+      }
+    });
+
+    // 5. Check matching Archives / Events
+    galleryItems.forEach(gal => {
+      if (gal.title.toLowerCase().includes(q) || gal.description.toLowerCase().includes(q)) {
+        suggestions.push({
+          id: `sug-gal-${gal.id}`,
+          type: 'archive',
+          title: gal.title,
+          subtitle: `${gal.category.toUpperCase()} • ${gal.date}`,
+          badge: 'Event Archive',
+          badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+          icon: <History className="w-3.5 h-3.5 text-purple-400" />,
+          actionText: 'View',
+          onApply: () => {
+            setQuery(gal.title);
+            setActiveCategory('archive');
+            setSelectedIndex(0);
+          }
+        });
+      }
+    });
+
+    return suggestions.slice(0, 6);
+  }, [isSearchOpen, queryClean, availableServiceCategories, services, bookings, inventory, galleryItems, showToast]);
+
+  // Windowed visible results for 60fps instant rendering
+  const visibleResults = useMemo(() => filteredResults.slice(0, 30), [filteredResults]);
 
   // Ensure selected index stays in range
   useEffect(() => {
@@ -609,7 +895,10 @@ export const GlobalSearchModal: React.FC = () => {
 
   // Keyboard navigation within search list
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'Tab' && realtimeSuggestions.length > 0) {
+      e.preventDefault();
+      realtimeSuggestions[0].onApply();
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex(prev => (prev + 1) % (filteredResults.length || 1));
     } else if (e.key === 'ArrowUp') {
@@ -626,30 +915,39 @@ export const GlobalSearchModal: React.FC = () => {
     }
   };
 
+  // Memoized category counts for quick badges
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: allResults.length,
+      clients: 0,
+      archive: 0,
+      service: 0,
+      inventory: 0,
+      page: 0,
+      action: 0,
+      faq: 0,
+    };
+    for (let i = 0; i < allResults.length; i++) {
+      const cat = allResults[i].category;
+      if (counts[cat] !== undefined) {
+        counts[cat]++;
+      }
+    }
+    return counts;
+  }, [allResults]);
+
+  const categories = useMemo(() => [
+    { id: 'all' as SearchCategoryType, label: 'All Intelligence', count: categoryCounts.all, icon: <Sparkles className="w-3.5 h-3.5" /> },
+    { id: 'clients' as SearchCategoryType, label: 'Client Records', count: categoryCounts.clients, icon: <Users className="w-3.5 h-3.5" /> },
+    { id: 'archive' as SearchCategoryType, label: 'Historical Archives', count: categoryCounts.archive, icon: <History className="w-3.5 h-3.5" /> },
+    { id: 'service' as SearchCategoryType, label: 'Services & Rigging', count: categoryCounts.service, icon: <Package className="w-3.5 h-3.5" /> },
+    { id: 'inventory' as SearchCategoryType, label: 'Warehouse Fleet', count: categoryCounts.inventory, icon: <Layers className="w-3.5 h-3.5" /> },
+    { id: 'page' as SearchCategoryType, label: 'Navigation', count: categoryCounts.page, icon: <ExternalLink className="w-3.5 h-3.5" /> },
+    { id: 'action' as SearchCategoryType, label: 'Actions', count: categoryCounts.action, icon: <Flame className="w-3.5 h-3.5" /> },
+    { id: 'faq' as SearchCategoryType, label: 'FAQs', count: categoryCounts.faq, icon: <HelpCircle className="w-3.5 h-3.5" /> },
+  ], [categoryCounts]);
+
   if (!isSearchOpen) return null;
-
-  // Category counts for quick badges
-  const categoryCounts = {
-    all: allResults.length,
-    clients: allResults.filter(r => r.category === 'clients').length,
-    archive: allResults.filter(r => r.category === 'archive').length,
-    service: allResults.filter(r => r.category === 'service').length,
-    inventory: allResults.filter(r => r.category === 'inventory').length,
-    page: allResults.filter(r => r.category === 'page').length,
-    action: allResults.filter(r => r.category === 'action').length,
-    faq: allResults.filter(r => r.category === 'faq').length,
-  };
-
-  const categories: { id: SearchCategoryType; label: string; count: number; icon: React.ReactNode }[] = [
-    { id: 'all', label: 'All Intelligence', count: categoryCounts.all, icon: <Sparkles className="w-3.5 h-3.5" /> },
-    { id: 'clients', label: 'Client Records', count: categoryCounts.clients, icon: <Users className="w-3.5 h-3.5" /> },
-    { id: 'archive', label: 'Historical Archives', count: categoryCounts.archive, icon: <History className="w-3.5 h-3.5" /> },
-    { id: 'service', label: 'Services & Rigging', count: categoryCounts.service, icon: <Package className="w-3.5 h-3.5" /> },
-    { id: 'inventory', label: 'Warehouse Fleet', count: categoryCounts.inventory, icon: <Layers className="w-3.5 h-3.5" /> },
-    { id: 'page', label: 'Navigation', count: categoryCounts.page, icon: <ExternalLink className="w-3.5 h-3.5" /> },
-    { id: 'action', label: 'Actions', count: categoryCounts.action, icon: <Flame className="w-3.5 h-3.5" /> },
-    { id: 'faq', label: 'FAQs', count: categoryCounts.faq, icon: <HelpCircle className="w-3.5 h-3.5" /> },
-  ];
 
   return (
     <AnimatePresence>
@@ -761,7 +1059,83 @@ export const GlobalSearchModal: React.FC = () => {
               )}
             </div>
 
-            {/* Quick Category Filter Pills */}
+            {/* Real-time Dynamic Suggestions Tray (as user types) */}
+            {realtimeSuggestions.length > 0 && (
+              <div className="mt-2.5 p-2.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#0C172C] to-amber-500/10 border border-amber-500/30">
+                <div className="flex items-center justify-between gap-2 mb-1.5 px-1 text-[11px] font-bold text-amber-300">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                    <span>Real-Time Suggestions ({realtimeSuggestions.length}):</span>
+                  </div>
+                  <span className="hidden sm:inline-block text-[10px] text-slate-400 font-mono">
+                    Press <kbd className="px-1 py-0.5 rounded bg-white/10 text-amber-300">Tab</kbd> to apply top match
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  {realtimeSuggestions.map((sug) => (
+                    <button
+                      key={sug.id}
+                      type="button"
+                      onClick={sug.onApply}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#091224] hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-400 text-left transition-all flex items-center gap-2 shrink-0 group cursor-pointer shadow-sm"
+                    >
+                      <div className="p-1 rounded-lg bg-amber-500/20 text-amber-300 group-hover:scale-110 transition-transform">
+                        {sug.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">
+                            <HighlightMatch text={sug.title} query={query} />
+                          </span>
+                          <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-md ${sug.badgeColor || 'bg-amber-500/20 text-amber-300'}`}>
+                            {sug.badge}
+                          </span>
+                        </div>
+                        {sug.subtitle && (
+                          <p className="text-[10px] text-slate-400 truncate max-w-[180px]">
+                            {sug.subtitle}
+                          </p>
+                        )}
+                      </div>
+                      <ArrowRight className="w-3 h-3 text-amber-400 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all shrink-0 ml-0.5" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Popular Searches (when search query is empty) */}
+            {!queryClean && (
+              <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+                <span className="text-[11px] font-bold text-slate-400 shrink-0 flex items-center gap-1 pl-1">
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>Popular:</span>
+                </span>
+                {POPULAR_SEARCH_SUGGESTIONS.map(pop => {
+                  const Icon = pop.icon;
+                  return (
+                    <button
+                      key={pop.label}
+                      type="button"
+                      onClick={() => {
+                        setQuery(pop.query);
+                        if (pop.serviceCategory !== 'all') {
+                          setSelectedServiceCategory(pop.serviceCategory);
+                        }
+                        setSelectedIndex(0);
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-[#0B1426] hover:bg-amber-500/20 text-slate-300 hover:text-amber-200 border border-white/10 hover:border-amber-400/40 text-[11px] font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      <Icon className="w-3 h-3 text-amber-400" />
+                      <span>{pop.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Primary Category Filter Pills */}
             <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
               {categories.map(cat => {
                 const isSelected = activeCategory === cat.id;
@@ -790,6 +1164,67 @@ export const GlobalSearchModal: React.FC = () => {
                 );
               })}
             </div>
+
+            {/* Service Category Filter Bar */}
+            <div className="mt-2.5 pt-2 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 shrink-0">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                <span>Filter by Service Category:</span>
+                {selectedServiceCategory !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedServiceCategory('all');
+                      setSelectedIndex(0);
+                    }}
+                    className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 hover:text-amber-300 underline cursor-pointer"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {availableServiceCategories.map(svcCat => {
+                  const isCatSelected = selectedServiceCategory === svcCat.id;
+                  const Icon = svcCat.icon;
+                  const count = svcCat.id === 'all' 
+                    ? services.length 
+                    : services.filter(s => s.category === svcCat.id).length;
+
+                  return (
+                    <button
+                      key={svcCat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedServiceCategory(svcCat.id);
+                        if (activeCategory !== 'all' && activeCategory !== 'service' && activeCategory !== 'inventory') {
+                          setActiveCategory('service');
+                        }
+                        setSelectedIndex(0);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                        isCatSelected
+                          ? 'bg-amber-400 text-slate-950 font-black shadow-sm ring-1 ring-amber-300'
+                          : 'bg-[#080E1C] hover:bg-white/10 text-slate-300 hover:text-white border border-white/10'
+                      }`}
+                      title={svcCat.label}
+                    >
+                      <Icon className={`w-3 h-3 ${isCatSelected ? 'text-slate-950' : 'text-amber-400'}`} />
+                      <span>{svcCat.shortLabel || svcCat.label}</span>
+                      {count > 0 && (
+                        <span className={`text-[9px] px-1.2 py-0.1 rounded ${
+                          isCatSelected ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-white/10 text-slate-400'
+                        }`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Main Dual-Pane Interactive Layout: Left Results List | Right 3D Interactive Preview Inspector */}
@@ -801,7 +1236,14 @@ export const GlobalSearchModal: React.FC = () => {
               className="lg:col-span-7 p-2 sm:p-3 overflow-y-auto space-y-1.5 border-b lg:border-b-0 lg:border-r border-amber-500/15 max-h-[40vh] lg:max-h-full"
             >
               <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <span>Matching Records ({filteredResults.length})</span>
+                <div className="flex items-center gap-2">
+                  <span>Matching Records ({filteredResults.length})</span>
+                  {selectedServiceCategory !== 'all' && (
+                    <span className="text-[10px] font-bold text-amber-300 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30">
+                      Category: {availableServiceCategories.find(c => c.id === selectedServiceCategory)?.shortLabel || selectedServiceCategory}
+                    </span>
+                  )}
+                </div>
                 {queryClean && <span className="text-amber-300 lowercase font-normal">query: &ldquo;{queryClean}&rdquo;</span>}
               </div>
 
@@ -810,87 +1252,110 @@ export const GlobalSearchModal: React.FC = () => {
                   <HelpCircle className="w-10 h-10 mx-auto opacity-40 text-amber-400" />
                   <p className="text-sm font-bold text-white">No results matching &ldquo;{query}&rdquo;</p>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    Try searching by client name (<strong className="text-amber-300">Dr. Sarah</strong>, <strong className="text-amber-300">Kenneth</strong>), reference code (<strong className="text-amber-300">SBL-2026</strong>), city (<strong className="text-amber-300">Masaka</strong>, <strong className="text-amber-300">Munyonyo</strong>), or equipment (<strong className="text-amber-300">Mega Tents</strong>, <strong className="text-amber-300">Line Array</strong>).
+                    Try clearing service category filters or searching by client name (<strong className="text-amber-300">Dr. Sarah</strong>, <strong className="text-amber-300">Kenneth</strong>), reference code (<strong className="text-amber-300">SBL-2026</strong>), city (<strong className="text-amber-300">Masaka</strong>, <strong className="text-amber-300">Munyonyo</strong>), or equipment (<strong className="text-amber-300">Mega Tents</strong>, <strong className="text-amber-300">Line Array</strong>).
                   </p>
+                  {selectedServiceCategory !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedServiceCategory('all')}
+                      className="mt-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset Category Filter</span>
+                    </button>
+                  )}
                 </div>
               ) : (
-                filteredResults.map((result, index) => {
-                  const isSelected = selectedIndex === index;
-                  return (
-                    <div
-                      key={result.id}
-                      onClick={() => result.onSelect()}
-                      onMouseEnter={() => setSelectedIndex(index)}
-                      className={`w-full p-3 rounded-2xl transition-all flex items-center justify-between gap-3 cursor-pointer text-left relative overflow-hidden group ${
-                        isSelected
-                          ? 'bg-gradient-to-r from-[#0F1E38] via-[#142646] to-[#0F1E38] border border-amber-400/60 text-white shadow-xl shadow-amber-500/5'
-                          : 'hover:bg-white/5 border border-white/5 text-slate-300'
-                      }`}
-                    >
-                      {/* Active Indicator Bar */}
-                      {isSelected && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 via-yellow-400 to-amber-500" />
-                      )}
-
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Icon / Thumbnail */}
-                        {result.image ? (
-                          <div className="w-11 h-11 rounded-xl overflow-hidden border border-white/15 shrink-0 relative">
-                            <img
-                              src={result.image}
-                              alt={result.title}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          </div>
-                        ) : (
-                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
-                            isSelected 
-                              ? 'bg-gradient-to-br from-amber-500 to-yellow-500 text-slate-950 border-amber-300 shadow-md' 
-                              : 'bg-[#091120] text-slate-300 border-white/10'
-                          }`}>
-                            {result.icon}
-                          </div>
+                <>
+                  {visibleResults.map((result, index) => {
+                    const isSelected = selectedIndex === index;
+                    return (
+                      <div
+                        key={result.id}
+                        onClick={() => result.onSelect()}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                        className={`w-full p-3 rounded-2xl transition-all flex items-center justify-between gap-3 cursor-pointer text-left relative overflow-hidden group ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-[#0F1E38] via-[#142646] to-[#0F1E38] border border-amber-400/60 text-white shadow-xl shadow-amber-500/5'
+                            : 'hover:bg-white/5 border border-white/5 text-slate-300'
+                        }`}
+                      >
+                        {/* Active Indicator Bar */}
+                        {isSelected && (
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 via-yellow-400 to-amber-500" />
                         )}
 
-                        {/* Title & Metadata */}
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <h4 className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-amber-300 transition-colors">
-                              {result.title}
-                            </h4>
-                            {result.badge && (
-                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${result.badgeColor || 'bg-amber-500/10 text-amber-300 border-amber-500/30'}`}>
-                                {result.badge}
-                              </span>
-                            )}
-                          </div>
-                          {result.subtitle && (
-                            <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                              {result.subtitle}
-                            </p>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Icon / Thumbnail */}
+                          {result.image ? (
+                            <div className="w-11 h-11 rounded-xl overflow-hidden border border-white/15 shrink-0 relative">
+                              <img
+                                src={result.image}
+                                alt={result.title}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                            </div>
+                          ) : (
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
+                              isSelected 
+                                ? 'bg-gradient-to-br from-amber-500 to-yellow-500 text-slate-950 border-amber-300 shadow-md' 
+                                : 'bg-[#091120] text-slate-300 border-white/10'
+                            }`}>
+                              {result.icon}
+                            </div>
                           )}
-                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-300">
-                            <span className="text-amber-300 font-semibold">{result.categoryLabel}</span>
+
+                          {/* Title & Metadata */}
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <h4 className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-amber-300 transition-colors">
+                                <HighlightMatch text={result.title} query={deferredQuery} />
+                              </h4>
+                              {result.badge && (
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${result.badgeColor || 'bg-amber-500/10 text-amber-300 border-amber-500/30'}`}>
+                                  {result.badge}
+                                </span>
+                              )}
+                              {result.serviceCategoryLabel && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 shrink-0">
+                                  {result.serviceCategoryLabel}
+                                </span>
+                              )}
+                            </div>
+                            {result.subtitle && (
+                              <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                                <HighlightMatch text={result.subtitle} query={deferredQuery} />
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-300">
+                              <span className="text-amber-300 font-semibold">{result.categoryLabel}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Right Action Trigger */}
-                      <div className="flex items-center gap-1 shrink-0 text-slate-400">
-                        {isSelected ? (
-                          <div className="flex items-center gap-1 text-[11px] font-extrabold text-amber-300 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/30">
-                            <span>Inspect</span>
-                            <CornerDownLeft className="w-3.5 h-3.5" />
-                          </div>
-                        ) : (
-                          <ChevronRight className="w-4 h-4 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-                        )}
+                        {/* Right Action Trigger */}
+                        <div className="flex items-center gap-1 shrink-0 text-slate-400">
+                          {isSelected ? (
+                            <div className="flex items-center gap-1 text-[11px] font-extrabold text-amber-300 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/30">
+                              <span>Inspect</span>
+                              <CornerDownLeft className="w-3.5 h-3.5" />
+                            </div>
+                          ) : (
+                            <ChevronRight className="w-4 h-4 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                          )}
+                        </div>
                       </div>
+                    );
+                  })}
+                  {filteredResults.length > visibleResults.length && (
+                    <div className="p-2.5 text-center text-[11px] text-slate-400 bg-white/[0.02] rounded-xl border border-white/5 flex items-center justify-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Showing top 30 of {filteredResults.length} matching records. Type further to pinpoint.</span>
                     </div>
-                  );
-                })
+                  )}
+                </>
               )}
             </div>
 
@@ -902,17 +1367,18 @@ export const GlobalSearchModal: React.FC = () => {
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
                   style={{
-                    transform: `perspective(1000px) rotateX(${cardTilt.rotateX}deg) rotateY(${cardTilt.rotateY}deg) scale3d(1.01, 1.01, 1.01)`,
+                    transform: 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)',
                     transformStyle: 'preserve-3d',
-                    transition: 'transform 0.15s ease-out'
+                    transition: 'transform 0.12s ease-out'
                   }}
                   className="w-full rounded-2xl bg-gradient-to-b from-[#0C1527] to-[#070D18] border border-amber-400/40 p-5 shadow-2xl relative overflow-hidden flex flex-col justify-between space-y-4"
                 >
                   {/* Dynamic 3D Specular Sheen Overlay */}
                   <div
+                    ref={specularGlowRef}
                     className="absolute inset-0 pointer-events-none opacity-40 transition-opacity"
                     style={{
-                      background: `radial-gradient(circle at ${cardTilt.mouseX}% ${cardTilt.mouseY}%, rgba(245, 158, 11, 0.25) 0%, transparent 60%)`
+                      background: 'radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.25) 0%, transparent 60%)'
                     }}
                   />
 
@@ -1124,6 +1590,28 @@ export const GlobalSearchModal: React.FC = () => {
                         <p className="text-xs text-amber-300 font-semibold mt-0.5">
                           {activeResult.serviceData.tagline}
                         </p>
+
+                        {activeResult.serviceData.serviceCategoryLabel && (
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400">Category:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeResult.serviceData?.serviceCategory) {
+                                  setSelectedServiceCategory(activeResult.serviceData.serviceCategory);
+                                  setActiveCategory('service');
+                                  setSelectedIndex(0);
+                                  showToast('Category Filter Applied', `Showing all services in "${activeResult.serviceData.serviceCategoryLabel}"`, 'info');
+                                }
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              title="Filter by this service category"
+                            >
+                              <Tag className="w-2.5 h-2.5" />
+                              <span>{activeResult.serviceData.serviceCategoryLabel}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {activeResult.serviceData.basePrice && (

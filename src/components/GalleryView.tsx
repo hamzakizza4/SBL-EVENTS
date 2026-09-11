@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAdminContentSync } from '../context/AdminContentSyncContext';
 import { 
   VIDEO_REELS, 
   COMPANY_CONTACT_INFO, 
@@ -35,12 +36,15 @@ import {
   Flame,
   UserCheck,
   Search,
-  ChevronLeft
+  ChevronLeft,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const GalleryView: React.FC = () => {
-  const { galleryItems, openBookingModal, theme } = useApp();
+  const { galleryItems, openBookingModal, theme, isAdminLoggedIn, openCardEditor } = useApp();
+  const { videoReels } = useAdminContentSync();
+  const allReels = (videoReels && videoReels.length > 0) ? videoReels : VIDEO_REELS;
   const t = getThemeClasses(theme);
 
   const [mainViewMode, setMainViewMode] = useState<'photos' | 'videos'>('photos');
@@ -75,7 +79,7 @@ export const GalleryView: React.FC = () => {
     return matchTitle || matchDesc || matchLoc || matchCat || matchBadge || matchClient || matchAttendees;
   });
 
-  const filteredVideos = VIDEO_REELS.filter((reel) => {
+  const filteredVideos = allReels.filter((reel) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
@@ -269,6 +273,24 @@ export const GalleryView: React.FC = () => {
                         )}
                       </div>
 
+                      {/* Top Right Admin Edit Button */}
+                      {isAdminLoggedIn && (
+                        <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 z-30">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCardEditor('gallery', item);
+                            }}
+                            className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 text-[9px] sm:text-[11px] font-black shadow-lg flex items-center gap-1 transition-all cursor-pointer"
+                            title="Edit Gallery Item (Admin)"
+                          >
+                            <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </div>
+                      )}
+
                       {/* Bottom Card Overlay */}
                       <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-5 space-y-1 sm:space-y-2 text-white">
                         <div className="flex items-center gap-1.5 sm:gap-3 text-[9px] sm:text-[11px] text-slate-300">
@@ -438,9 +460,26 @@ export const GalleryView: React.FC = () => {
                           <Film className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                           <span>{reel.badge}</span>
                         </span>
-                        <span className="bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-bold text-slate-200">
-                          {reel.duration}
-                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          {isAdminLoggedIn && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openCardEditor('reel', reel);
+                              }}
+                              className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 text-[9px] sm:text-[11px] font-black shadow-lg flex items-center gap-1 transition-all cursor-pointer"
+                              title="Edit Reel (Admin)"
+                            >
+                              <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                              <span>Edit</span>
+                            </button>
+                          )}
+                          <span className="bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-bold text-slate-200">
+                            {reel.duration}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Bottom Stats */}

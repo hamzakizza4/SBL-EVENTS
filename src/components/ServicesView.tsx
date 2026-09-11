@@ -28,12 +28,13 @@ import {
   Video,
   ExternalLink,
   Play,
-  MessageCircle
+  MessageCircle,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const ServicesView: React.FC = () => {
-  const { services, openBookingModal, theme, eventCategories } = useApp();
+  const { services, openBookingModal, theme, eventCategories, isAdminLoggedIn, openCardEditor } = useApp();
   const t = getThemeClasses(theme);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -169,11 +170,27 @@ export const ServicesView: React.FC = () => {
                       )}
                     </div>
 
-                    {srv.b2bAvailable && (
-                      <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded sm:rounded-md uppercase tracking-wider shadow-sm">
-                        B2B
-                      </div>
-                    )}
+                    <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 flex items-center gap-1.5 z-20">
+                      {isAdminLoggedIn && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCardEditor('service', srv);
+                          }}
+                          className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 text-[9px] sm:text-[11px] font-black shadow-lg flex items-center gap-1 transition-all cursor-pointer"
+                          title="Edit Service Card (Admin)"
+                        >
+                          <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      {srv.b2bAvailable && (
+                        <div className="bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded sm:rounded-md uppercase tracking-wider shadow-sm">
+                          B2B
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Content */}

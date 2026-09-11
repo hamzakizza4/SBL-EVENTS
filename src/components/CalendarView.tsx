@@ -42,7 +42,8 @@ import {
   AlertCircle,
   CalendarCheck,
   Wrench,
-  PackageCheck
+  PackageCheck,
+  Pencil
 } from 'lucide-react';
 
 type CalendarStatusType = 'booked' | 'preparing' | 'teardown' | 'showcase' | 'available' | 'past';
@@ -55,7 +56,9 @@ export const CalendarView: React.FC = () => {
     openBookingModal, 
     theme, 
     bufferDaysBefore, 
-    bufferDaysAfter 
+    bufferDaysAfter,
+    isAdminLoggedIn,
+    openCardEditor
   } = useApp();
   const t = getThemeClasses(theme);
 
@@ -762,13 +765,27 @@ export const CalendarView: React.FC = () => {
               {selectedDayEvents.map((e) => (
                 <div
                   key={e.id}
-                  className="p-5 rounded-2xl bg-[#060B14] border border-amber-500/20 space-y-3"
+                  className="relative p-5 rounded-2xl bg-[#060B14] border border-amber-500/20 space-y-3 group"
                 >
+                  {isAdminLoggedIn && (
+                    <button
+                      type="button"
+                      onClick={(evt) => {
+                        evt.stopPropagation();
+                        openCardEditor('event', e);
+                      }}
+                      className="absolute top-4 right-4 z-20 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 text-xs font-black shadow-md flex items-center gap-1 transition-all cursor-pointer"
+                      title="Edit Event (Admin)"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      <span>Edit</span>
+                    </button>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                       {e.eventType}
                     </span>
-                    <span className="text-xs text-slate-300 font-mono">
+                    <span className={`text-xs text-slate-300 font-mono ${isAdminLoggedIn ? 'mr-16' : ''}`}>
                       {e.startDate} to {e.endDate}
                     </span>
                   </div>

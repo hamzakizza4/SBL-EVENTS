@@ -28,12 +28,13 @@ import {
   Calendar,
   CheckCircle2,
   Sparkles,
-  Quote
+  Quote,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const TestimonialsView: React.FC = () => {
-  const { testimonials, addTestimonial, theme, openBookingModal } = useApp();
+  const { testimonials, addTestimonial, theme, openBookingModal, isAdminLoggedIn, openCardEditor } = useApp();
   const t = getThemeClasses(theme);
 
   const [filterType, setFilterType] = useState<string>('all');
@@ -369,6 +370,17 @@ export const TestimonialsView: React.FC = () => {
 
                     {/* Quick CTA inside carousel */}
                     <div className="flex items-center gap-2 shrink-0">
+                      {isAdminLoggedIn && (
+                        <button
+                          type="button"
+                          onClick={() => openCardEditor('testimonial', activeTestimonial)}
+                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                          title="Edit Testimonial (Admin)"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openBookingModal({
@@ -459,8 +471,22 @@ export const TestimonialsView: React.FC = () => {
           {filteredReviews.map((test) => (
             <StaggerItem key={test.id}>
               <div
-                className="bg-[#0B1322] border border-amber-500/20 rounded-xl sm:rounded-3xl p-3 sm:p-7 shadow-lg sm:shadow-2xl space-y-2 sm:space-y-4 flex flex-col justify-between h-full hover:-translate-y-1 hover:border-amber-400/50 transition-all duration-300"
+                className="relative bg-[#0B1322] border border-amber-500/20 rounded-xl sm:rounded-3xl p-3 sm:p-7 shadow-lg sm:shadow-2xl space-y-2 sm:space-y-4 flex flex-col justify-between h-full hover:-translate-y-1 hover:border-amber-400/50 transition-all duration-300 group"
               >
+                {isAdminLoggedIn && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCardEditor('testimonial', test);
+                    }}
+                    className="absolute top-2 right-2 sm:top-3 sm:right-3 z-20 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 text-[9px] sm:text-[11px] font-black shadow-md flex items-center gap-1 transition-all cursor-pointer"
+                    title="Edit Review (Admin)"
+                  >
+                    <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    <span>Edit</span>
+                  </button>
+                )}
                 <div className="space-y-1.5 sm:space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-0.5 text-amber-300">
@@ -468,7 +494,7 @@ export const TestimonialsView: React.FC = () => {
                         <Star key={i} className="w-3 h-3 sm:w-4 sm:h-4 fill-amber-300 text-amber-300" />
                       ))}
                     </div>
-                    <span className="text-[8px] sm:text-[10px] font-extrabold text-amber-300 uppercase bg-amber-500/10 px-1.5 sm:px-2.5 py-0.5 rounded-full border border-amber-500/30 truncate max-w-[80px] sm:max-w-none">
+                    <span className={`text-[8px] sm:text-[10px] font-extrabold text-amber-300 uppercase bg-amber-500/10 px-1.5 sm:px-2.5 py-0.5 rounded-full border border-amber-500/30 truncate max-w-[80px] sm:max-w-none ${isAdminLoggedIn ? 'mr-12 sm:mr-16' : ''}`}>
                       {test.eventType.replace('_', ' ')}
                     </span>
                   </div>

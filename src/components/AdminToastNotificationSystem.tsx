@@ -54,7 +54,7 @@ export const AdminToastNotificationSystem: React.FC<AdminToastNotificationProps>
   return (
     <div
       id="admin-toast-portal"
-      className="fixed top-20 right-4 sm:right-8 z-50 flex flex-col gap-3.5 max-w-sm sm:max-w-md w-full pointer-events-none"
+      className="fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center gap-2.5 max-w-[440px] w-[94%] sm:w-full pointer-events-none"
     >
       <AnimatePresence>
         {alerts.map((alert) => {
@@ -66,31 +66,53 @@ export const AdminToastNotificationSystem: React.FC<AdminToastNotificationProps>
           return (
             <motion.div
               key={alert.id}
-              initial={{ opacity: 0, y: -25, scale: 0.92 }}
+              initial={{ opacity: 0, y: -40, scale: 0.94 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.88, transition: { duration: 0.2 } }}
-              transition={{ type: 'spring', stiffness: 350, damping: 26 }}
-              className="pointer-events-auto rounded-3xl border-2 border-amber-400/60 bg-[#0A1628]/95 p-4 sm:p-5 text-white shadow-2xl backdrop-blur-2xl ring-1 ring-white/15 overflow-hidden relative group"
+              exit={{ opacity: 0, y: -25, scale: 0.95, transition: { duration: 0.2 } }}
+              transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+              className="pointer-events-auto w-full rounded-[26px] bg-[#111b21]/95 text-white backdrop-blur-2xl border border-white/12 shadow-[0_20px_45px_rgba(0,0,0,0.65),0_1px_1px_rgba(255,255,255,0.15)_inset] p-3.5 sm:p-4 select-none relative overflow-hidden"
             >
-              {/* Top Accent Gradient & Shimmer Bar */}
-              <div className={`absolute top-0 left-0 right-0 h-1 ${
-                category === 'callback'
-                  ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400'
-                  : category === 'review'
-                  ? 'bg-gradient-to-r from-amber-400 via-pink-400 to-amber-400'
-                  : category === 'settings'
-                  ? 'bg-gradient-to-r from-blue-400 via-indigo-400 to-blue-400'
-                  : 'bg-gradient-to-r from-amber-400 via-sky-400 to-amber-400'
-              } animate-shimmer-sweep`} />
+              {/* iOS Grabber Pill */}
+              <div className="w-10 h-1 rounded-full bg-white/25 mx-auto -mt-1 mb-2.5" />
 
-              {/* Header Badge & Close Button */}
+              {/* WhatsApp App Header Bar */}
+              <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-[6px] bg-[#25D366] flex items-center justify-center shadow-md shadow-[#25D366]/30 shrink-0">
+                    <MessageSquare className="w-3 h-3 text-white fill-white" />
+                  </div>
+                  <span className="text-[11px] font-black tracking-wider text-[#25D366] uppercase">
+                    WHATSAPP
+                  </span>
+                  <span className="text-slate-500 text-[10px]">•</span>
+                  <span className="text-[11px] font-semibold text-slate-300">
+                    Admin Dispatch
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {alert.timestamp || 'now'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onDismiss(alert.id)}
+                    className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                    title="Dismiss alert"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Header Badge */}
               <div className="flex items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="relative flex h-3 w-3">
+                  <span className="relative flex h-2.5 w-2.5">
                     <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                       category === 'callback' ? 'bg-emerald-400' : category === 'review' ? 'bg-amber-400' : 'bg-amber-400'
                     }`} />
-                    <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
                       category === 'callback' ? 'bg-emerald-500' : category === 'review' ? 'bg-amber-500' : 'bg-amber-500'
                     }`} />
                   </span>

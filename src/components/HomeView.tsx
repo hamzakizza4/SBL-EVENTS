@@ -49,7 +49,8 @@ import {
   Globe,
   X,
   Tag,
-  ChevronDown
+  ChevronDown,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -62,7 +63,9 @@ export const HomeView: React.FC = () => {
     setCurrentPage, 
     openBookingModal,
     openSplashScreen,
-    theme
+    theme,
+    isAdminLoggedIn,
+    openCardEditor
   } = useApp();
 
   const { videoReels, tiktokConfig } = useAdminContentSync();
@@ -617,9 +620,26 @@ export const HomeView: React.FC = () => {
                       <Film className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                       <span>{reel.badge}</span>
                     </span>
-                    <span className="bg-black/75 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-bold text-slate-200">
-                      {reel.duration}
-                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      {isAdminLoggedIn && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCardEditor('reel', reel);
+                          }}
+                          className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 text-[9px] sm:text-[11px] font-black shadow-lg flex items-center gap-1 transition-all cursor-pointer"
+                          title="Edit Reel (Admin)"
+                        >
+                          <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      <span className="bg-black/75 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-bold text-slate-200">
+                        {reel.duration}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Bottom Stats */}
@@ -712,11 +732,28 @@ export const HomeView: React.FC = () => {
                       </span>
                     </div>
 
-                    {srv.b2bAvailable && (
-                      <div className="absolute top-2 right-2 bg-amber-400 text-slate-950 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded uppercase">
-                        B2B Hire
-                      </div>
-                    )}
+                    {/* Admin Edit Button or B2B Tag */}
+                    <div className="absolute top-2 right-2 flex items-center gap-1.5 z-20">
+                      {isAdminLoggedIn && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCardEditor('service', srv);
+                          }}
+                          className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 text-[9px] sm:text-[10px] font-black shadow-lg flex items-center gap-1 transition-all cursor-pointer"
+                          title="Edit Service Card (Admin)"
+                        >
+                          <Pencil className="w-2.5 h-2.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      {srv.b2bAvailable && (
+                        <div className="bg-amber-400 text-slate-950 text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded uppercase">
+                          B2B Hire
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Body info */}
@@ -1007,13 +1044,27 @@ export const HomeView: React.FC = () => {
         <StaggerContainer className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4" staggerDelay={0.08}>
           {upcomingShowcases.map((evt) => (
             <StaggerItem key={evt.id}>
-              <div className="p-3 sm:p-5 rounded-xl sm:rounded-3xl bg-[#0B1322] border border-white/10 space-y-1.5 sm:space-y-3 shadow-lg sm:shadow-xl h-full flex flex-col justify-between">
+              <div className="relative p-3 sm:p-5 rounded-xl sm:rounded-3xl bg-[#0B1322] border border-white/10 space-y-1.5 sm:space-y-3 shadow-lg sm:shadow-xl h-full flex flex-col justify-between group">
+                {isAdminLoggedIn && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCardEditor('event', evt);
+                    }}
+                    className="absolute top-2 right-2 z-20 px-2 py-0.5 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 text-[9px] sm:text-[10px] font-black shadow-md flex items-center gap-1 transition-all cursor-pointer"
+                    title="Edit Event (Admin)"
+                  >
+                    <Pencil className="w-2.5 h-2.5" />
+                    <span>Edit</span>
+                  </button>
+                )}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-yellow-500 px-1.5 sm:px-2.5 py-0.5 rounded uppercase text-[8px] sm:text-[10px]">
                       {evt.eventType}
                     </span>
-                    <span className="text-amber-300 font-mono text-[9px] sm:text-[11px]">{evt.startDate}</span>
+                    <span className={`text-amber-300 font-mono text-[9px] sm:text-[11px] ${isAdminLoggedIn ? 'mr-12' : ''}`}>{evt.startDate}</span>
                   </div>
                   <h4 className="font-bold text-xs sm:text-sm text-white line-clamp-1 sm:line-clamp-2">{evt.title}</h4>
                 </div>
@@ -1049,7 +1100,21 @@ export const HomeView: React.FC = () => {
         <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-5" staggerDelay={0.08}>
           {featuredTestimonials.map((test) => (
             <StaggerItem key={test.id}>
-              <div className="p-4 sm:p-6 rounded-xl sm:rounded-3xl bg-[#0B1322] border border-white/10 shadow-lg sm:shadow-xl space-y-2.5 sm:space-y-3 flex flex-col justify-between h-full">
+              <div className="relative p-4 sm:p-6 rounded-xl sm:rounded-3xl bg-[#0B1322] border border-white/10 shadow-lg sm:shadow-xl space-y-2.5 sm:space-y-3 flex flex-col justify-between h-full group">
+                {isAdminLoggedIn && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCardEditor('testimonial', test);
+                    }}
+                    className="absolute top-3 right-3 z-20 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 text-[10px] sm:text-xs font-black shadow-md flex items-center gap-1 transition-all cursor-pointer"
+                    title="Edit Review (Admin)"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
+                )}
                 <div className="space-y-1.5 sm:space-y-2">
                   <div className="flex items-center gap-1 text-amber-400">
                     {[...Array(test.rating)].map((_, i) => (

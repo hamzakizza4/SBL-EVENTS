@@ -143,7 +143,6 @@ export const AdminDashboard: React.FC = () => {
   const [userIdInput, setUserIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(false);
-  const [showDemoPasscodes, setShowDemoPasscodes] = useState(false);
   
   // Dashboard Navigation Tabs
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'bookings' | 'categories' | 'gallery' | 'services-media' | 'callbacks' | 'employees' | 'calendar' | 'inventory' | 'testimonials' | 'activity_logs' | 'tiktok'>('overview');
@@ -421,18 +420,6 @@ export const AdminDashboard: React.FC = () => {
         );
       }
     }
-  };
-
-  const handleQuickLoginMajor = () => {
-    setUserIdInput('sbl 1000');
-    setPasswordInput('123');
-    loginAdmin('sbl 1000', '123');
-  };
-
-  const handleQuickLoginSub = (uId: string) => {
-    setUserIdInput(uId);
-    setPasswordInput('123');
-    loginAdmin(uId, '123');
   };
 
   const handleExportCSV = () => {
@@ -789,61 +776,6 @@ export const AdminDashboard: React.FC = () => {
               <span>Sign In to Dashboard</span>
             </button>
           </form>
-
-          {/* Quick Demo Credentials & 1-Click Login */}
-          <div className="pt-4 border-t border-white/10 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                1-Click Quick Access
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowDemoPasscodes(!showDemoPasscodes)}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
-                title={showDemoPasscodes ? "Hide passcodes" : "Show passcodes"}
-              >
-                {showDemoPasscodes ? (
-                  <>
-                    <EyeOff className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="text-amber-400">Hide Passcodes</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Show Passcodes</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleQuickLoginMajor}
-                className="p-2.5 rounded-xl bg-white/10 hover:bg-amber-400/20 hover:border-amber-400/40 border border-white/20 text-xs font-bold text-white text-center transition-all cursor-pointer"
-              >
-                <div className="text-amber-300 flex items-center justify-center gap-1">
-                  <Crown className="w-3.5 h-3.5" />
-                  <span>Major Admin</span>
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                  sbl 1000 {showDemoPasscodes ? '/ 123' : '/ ••••'}
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLoginSub('sbl 1001')}
-                className="p-2.5 rounded-xl bg-white/10 hover:bg-emerald-400/20 hover:border-emerald-400/40 border border-white/20 text-xs font-bold text-white text-center transition-all cursor-pointer"
-              >
-                <div className="text-emerald-300 flex items-center justify-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Operations</span>
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                  sbl 1001 {showDemoPasscodes ? '/ 123' : '/ ••••'}
-                </div>
-              </button>
-            </div>
-          </div>
 
         </motion.div>
       </div>
